@@ -1,0 +1,25 @@
+\documentclass[12pt,preprint,nofootinbib,noshowkeys,noshowpacs,longbibliography,
+superscriptaddress,tightenlines,floatfix]{revtex4-2}
+\usepackage{amsmath,amsfonts,amsthm,amssymb,bbm}
+\usepackage{graphics,graphicx}
+\usepackage{color}
+\usepackage{bm}
+\definecolor{darkblue}{RGB}{0,0,196}
+\definecolor{darkgreen}{RGB}{0,120,0}
+
+\begin{document}
+
+\section{Objectives:}
+\begin{enumerate}
+    \item Solve EOM, $$\frac{\partial \epsilon}{\partial \tau} = -\frac{\epsilon+P}{\tau}$$
+    where $\epsilon = \epsilon(\tau)$, and the EOS is $P = \frac{1}{3}\epsilon$
+    \item Later allow $\epsilon = \epsilon(x, \tau)$
+\end{enumerate}
+
+\section{Process:}
+\begin{enumerate}
+    \item Construct a 1d spatial grid with Gaussian distribution for the energy density $$\epsilon_{0} = A e^{-\tau^{2}/\tau^{2}_{R}}$$
+    \item Simplyfy the EOM using EOS and then discretize the EOM over this grid 
+    \item Evolve the system in time using the \textbf{TimeStepper} from PETSc
+\end{enumerate}
+\end{document}
