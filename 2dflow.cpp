@@ -6,6 +6,7 @@ typedef struct {
     PetscScalar E, Mx, My;
 } Node;
 
+
 int main(int argc, char **argv) {
     PetscErrorCode ierr;
     DM             da;
@@ -43,7 +44,7 @@ int main(int argc, char **argv) {
     ierr = DMDAVecGetArrayDOF(da, global_vec, &local_array); CHKERRQ(ierr);
     ierr = DMDAGetCorners(da, &xs, &ys, NULL, &xm, &ym, NULL); CHKERRQ(ierr);
 
-    // Initialize local grid values with Gaussian profile
+    // Initialize local grid values with Gaussian profile      std::cout << "ux = " << ux << std::endl; 
     const PetscReal sigma2 = sigma*sigma;
     for(PetscInt j = ys; j < ys + ym; j++) {
         for(PetscInt i = xs; i < xs + xm; i++) {
