@@ -1,1 +1,19 @@
 # 2dflow
+
+# MPI
+Petsc is compiled with MPI. The generic name is mpicxx. on my
+machine it is something longer e.g. mpic++-mpich-clang17.
+Check that you can run an mpi program. On my machine this is mpiexec-mpich-clang17
+```
+mpicxx -o mpi_check.exe mpi_check.cxx
+mpiexec -n 2 ./mpi_check.exe
+```
+
+# pkg-config
+If this works next check that petsc is installed correctly.
+pkg-config is the way to go. Check that this produces
+the compile flags for petsc:
+```
+pkg-config --cflags petsc
+pkg-config --libs petsc
+```
