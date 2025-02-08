@@ -1,0 +1,22 @@
+# Ignore build directories
+dist/
+build/
+
+# Ignore environment variables
+.env
+
+# Ignore OS generated files
+.DS_Store
+Thumbs.db
+
+# Ignore IDE specific files
+.vscode/
+
+# Ignore coverage reports
+coverage/
+
+# Ignore temporary files
+*.tmp
+*.swp
+a.out
+*.aux
