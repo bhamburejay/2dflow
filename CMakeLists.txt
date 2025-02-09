@@ -17,8 +17,9 @@ endif (CXX_COMPILER)
 # ad an include directory include
 include_directories(include)
 
-find_package(PkgConfig REQUIRED)
-pkg_search_module(PETSC REQUIRED IMPORTED_TARGET PETSc)
+find_package(PkgConfig REQUIRED) 
+pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc)
+
 
 # List the sources 
 set(SOURCES src/jsoncpp.cpp)
