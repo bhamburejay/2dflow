@@ -17,12 +17,11 @@ endif (CXX_COMPILER)
 # ad an include directory include
 include_directories(include)
 
-# List the sources 
-set(SOURCES src/jsoncpp.cpp)
-
-
 find_package(PkgConfig REQUIRED)
 pkg_search_module(PETSC REQUIRED IMPORTED_TARGET PETSc)
+
+# List the sources 
+set(SOURCES src/jsoncpp.cpp)
 
 # Add an executable based on the sources
 add_executable(test_json.exe src/test_json.cpp ${SOURCES})
@@ -30,7 +29,9 @@ add_executable(test_json.exe src/test_json.cpp ${SOURCES})
 add_executable(test_mpi1.exe src/test_mpi1.cpp)
 add_executable(test_petsc1.exe src/test_petsc1.cpp)
 add_executable(test_petsc2.exe src/test_petsc2.cpp)
+add_executable(test_vischydronode.exe src/test_vischydronode.cpp)
 
 target_link_libraries(test_mpi1.exe PkgConfig::PETSC)
 target_link_libraries(test_petsc1.exe PkgConfig::PETSC)
 target_link_libraries(test_petsc2.exe PkgConfig::PETSC)
+target_link_libraries(test_vischydronode.exe PkgConfig::PETSC)
