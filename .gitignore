@@ -20,3 +20,5 @@ coverage/
 *.swp
 a.out
 *.aux
+*.synctex.gz
+*.log

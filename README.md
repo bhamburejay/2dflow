@@ -18,7 +18,8 @@ This creates the tools to build the source code,  in particular it constructs th
 make 
 
 
-========================
+Trouble Shooting
+================
 
 # MPI
 Petsc is compiled with MPI. The generic name is mpicxx. on my

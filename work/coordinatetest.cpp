@@ -22,11 +22,13 @@ int main(int argc, char **argv) {
     // Set uniform coordinates
     DMDASetUniformCoordinates(da, xmin, xmax, ymin, ymax, PETSC_DECIDE, PETSC_DECIDE);
 
-    // This is difficult to understand
-    DMGetCoordinates(da, &coordinates);
-    // The DMDAVecGetArray function is used to get an array view of the coordinates global vector. The info is in the cda. 
+    // The DMDA shares a reference to the coordinate vector and the 
+    // Coordinate DMDA. These are owned by da, and should not be released. 
     DM cda;
+    DMGetCoordinates(da, &coordinates);
     DMGetCoordinateDM(da, &cda);
+    // Now we grab the coordinates as a c-style array in the usual Petscway, 
+    // using Coorindate DMDA, cda
     DMDAVecGetArray(cda, coordinates, &coords);
 
     PetscInt xm, ym, m, n;
