@@ -25,8 +25,13 @@ Petsc is compiled with MPI. The generic name is mpicxx. on my
 machine it is something longer e.g. mpic++-mpich-clang17.
 Check that you can run an mpi program. On my machine this is mpiexec-mpich-clang17
 ```
-mpicxx -o mpi_check.exe `pkg-config --cflags PETSc hdf5` mpi_check.cpp `pkg-config --libs PETSc`
+mpicxx -o mpi_check.exe mpi_check.cxx
 mpiexec -n 2 ./mpi_check.exe
+```
+
+On Mac you can compile with the following command
+```
+mpicxx -o mpi_check.exe `pkg-config --cflags PETSc hdf5` mpi_check.cpp `pkg-config --libs PETSc`
 ```
 
 # pkg-config
