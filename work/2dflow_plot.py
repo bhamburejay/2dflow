@@ -6,7 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 #from mpl_toolkits.mplot3d import Axes3D
 
-################### 2D plot #########################
+################## 2D plot #########################
 
 # Read HDF5 data
 with h5py.File('energy_out.h5', 'r') as f:
@@ -43,7 +43,7 @@ plt.show()
 
 
 
-####################### 3D plot work in progress ######################
+# ###################### 3D plot work in progress ######################
 # with h5py.File('energy_out.h5', 'r') as f:
 #     dataset = f['Energy'][:]
 #     energy_data = dataset[:, :, 0]  # First component is energy
