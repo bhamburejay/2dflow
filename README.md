@@ -30,6 +30,11 @@ mpicxx -o mpi_check.exe mpi_check.cxx
 mpiexec -n 2 ./mpi_check.exe
 ```
 
+On Mac you can compile with the following command
+```
+mpicxx -o mpi_check.exe `pkg-config --cflags PETSc hdf5` mpi_check.cpp `pkg-config --libs PETSc`
+```
+
 # pkg-config
 If this works next check that petsc is installed correctly.
 pkg-config is the way to go. Check that this produces
