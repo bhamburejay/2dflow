@@ -1,5 +1,6 @@
 #ifndef EOS_HPP
 #define EOS_HPP
+#include <cmath>
 
 class EOS {
  private:
