@@ -5,25 +5,15 @@
 #include <petscdmda.h>
 #include <petscviewerhdf5.h>
 #include <cmath>
+#include "VischydroNode.hpp"
 
-class HydroNode {
-public:
-    static const int N_DOF = 3;
-    static const int STENCIL_WIDTH = 1; // no. of ghost cells around real cells in a single process 
-    
-    PetscScalar E, Mx, My;  // Energy and momentum components. We resrve P for pressure
-                            // NOTE TO SELF: Need to add EOS
-
-    // constructor with initialization
-    HydroNode() : E(0.0), Mx(0.0), My(0.0) {}
-};
 
 int main(int argc, char **argv) {
     PetscErrorCode ierr;
     PetscMPIInt rank;
     DM da;
     Vec solution, local_sol;
-    HydroNode **nodes;
+    VischydroNode **nodes;  
     
     // NOTE TO SELF: as a check make values non-uniform along x & y directions
     PetscInt nx = 64, ny = 64;                       // grid size
@@ -38,9 +28,10 @@ int main(int argc, char **argv) {
     // 2d grid with ghosted boundary conditions
     // this means, the values of the real boundary cells are copied to ghost cells
     // micking neumann boundary conditions 
+    static const int stencil_width = 2;
     ierr = DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED,
                         DMDA_STENCIL_BOX, nx, ny, PETSC_DECIDE, PETSC_DECIDE,
-                        HydroNode::N_DOF, HydroNode::STENCIL_WIDTH,
+                        VischydroNode::NDOF, stencil_width,
                         NULL, NULL, &da); CHKERRQ(ierr);
     ierr = DMSetFromOptions(da); CHKERRQ(ierr);
     ierr = DMSetUp(da); CHKERRQ(ierr);
@@ -65,8 +56,8 @@ int main(int argc, char **argv) {
             // NOTE TO SELF: Change the center & maybe even sigma_x and sigma_y 
             // Also change momentum during next leg of progress
             nodes[j][i].E = E0 * std::exp(-(x*x + y*y)/(2*sigma*sigma));
-            nodes[j][i].Mx = 0.0;
-            nodes[j][i].My = 0.0;
+            nodes[j][i].M[0] = 0.0;
+            nodes[j][i].M[1] = 0.0;
         }
     }
     // "unlock" the local_sol
