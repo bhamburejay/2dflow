@@ -14,11 +14,16 @@ if (CXX_COMPILER)
   SET(CMAKE_CXX_COMPILER ${CXX_COMPILER})
 endif (CXX_COMPILER)
 
-# ad an include directory include
+# Add include directories
 include_directories(include)
+include_directories(src)
+#include_directories(/usr/include/jsoncpp)
 
 find_package(PkgConfig REQUIRED) 
 pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc)
+
+# Manually specify the library paths for jsoncpp
+#link_directories(/usr/lib/x86_64-linux-gnu)
 
 # List the sources 
 set(SOURCES src/jsoncpp.cpp)
@@ -31,15 +36,11 @@ add_executable(test_petsc1.exe src/test_petsc1.cpp)
 add_executable(test_petsc2.exe src/test_petsc2.cpp)
 add_executable(test_vischydronode.exe src/test_vischydronode.cpp)
 add_executable(coordinatetest.exe work/coordinatetest.cpp)
-add_executable(2dflow.exe work/2dflow.cpp)
-#add_executable(2d_grid_filled_with_data.exe work/2D_grid_filled_data.cpp)
+add_executable(2dflow.exe work/2dflow.cpp ${SOURCES})
 
 target_link_libraries(test_mpi1.exe PkgConfig::PETSC)
 target_link_libraries(test_petsc1.exe PkgConfig::PETSC)
 target_link_libraries(test_petsc2.exe PkgConfig::PETSC)
 target_link_libraries(test_vischydronode.exe PkgConfig::PETSC)
-target_link_libraries(test_vischydronode.exe PkgConfig::PETSC)
-
-
-target_link_libraries(2dflow.exe PkgConfig::PETSC)
 target_link_libraries(coordinatetest.exe PkgConfig::PETSC)
+target_link_libraries(2dflow.exe PkgConfig::PETSC)
