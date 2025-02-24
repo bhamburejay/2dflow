@@ -1,0 +1,22 @@
+{
+    "grid" : {
+        "nx":64,
+        "ny":64,
+        "stencil_width": 2
+    },
+
+    "physical_size":{
+        "Lx":1.0,
+        "Ly":1.0
+
+    },
+    "initial_conditions":{
+        "amplitude":1.0,
+        "sigma":0.1
+    },
+
+    "time": {
+        "dt": 0.0001,
+        "output_interval": 100
+    }
+}
