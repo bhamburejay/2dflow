@@ -7,14 +7,14 @@
     "grid": {
         "nx": 100,
         "ny": 100,
-        "stencil_width": 1
+        "stencil_width": 2
     },
     "physical_size": {
         "Lx": 10.0,
         "Ly": 10.0
     },
-    "initial_conditions": {
-        "amplitude": 1.0,
-        "sigma": 1000.0
+    "gaussian_initial_conditions": {
+        "amplitude": 5.0,
+        "sigma": 10.0
     }
 }
