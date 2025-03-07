@@ -18,12 +18,12 @@ public:
   Vec solution ;
   Vec local_solution  ;
   TS stepper ;
-  EOS *eos ;
+  const EOS *eos ;
 
   double get_dx() {return dx ;}
   double get_dy() {return dy ;}
 
-  Vischydro(Json::Value &config, EOS *eosin) ;  
+  Vischydro(Json::Value &config, const EOS *eosin) ;  
 
   ~Vischydro() { 
     TSDestroy(&stepper) ;

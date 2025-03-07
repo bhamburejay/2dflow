@@ -5,7 +5,7 @@
 void set_gaussian_initialconditions(Vischydro &hy) {
 
   auto &input = hy.configuration ;
-  EOS &eos = *hy.eos;
+  const EOS &eos = *hy.eos;
     
   double E0 = input["gaussian_initial_conditions"]["amplitude"].asDouble();
   double sigma = input["gaussian_initial_conditions"]["sigma"].asDouble();
@@ -34,12 +34,9 @@ void set_gaussian_initialconditions(Vischydro &hy) {
       
       auto &n = nodes[j][i];
       n.E = E0 * std::exp(-(x * x + y * y) / (2 * sigma * sigma));
-      std:: cout << "E: " << nodes[j][i].E << std::endl;
       n.M[0] = 0.0;
       n.M[1] = 0.0;
       double ein = n.E; 
-      n.print("Initial");
-      std::cout << "pressure " << eos.get_pressure(n.E, 0.0) << std::endl;
       idealHydroCellSolve(ein, n, eos);
     }
   }
@@ -54,7 +51,7 @@ void RunCode() {
   std::ifstream in("2dflow_input.json");
   in >> config;
   std::cout << config;
-  std::unique_ptr<EOS> eos;
+  std::unique_ptr<EOS> eos = std::make_unique<EOS>();
   Vischydro hydro(config, eos.get());
   set_gaussian_initialconditions(hydro) ;
   hydro.save("initial.h5");

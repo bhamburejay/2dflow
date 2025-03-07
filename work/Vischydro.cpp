@@ -40,7 +40,7 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
 
 }
 
-Vischydro::Vischydro(Json::Value &config, EOS *eosin) : configuration(config), eos(eosin) {
+Vischydro::Vischydro(Json::Value &config, const EOS *eosin) : configuration(config), eos(eosin) {
   // Extract parameters from JSON
   int nx = configuration["grid"]["nx"].asInt();
   int ny = configuration["grid"]["ny"].asInt();

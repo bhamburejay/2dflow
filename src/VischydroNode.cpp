@@ -29,6 +29,10 @@ double idealHydroCellIFunction(const double &e, /* out */ VischydroNode &n,
   n.cs2 = eos.get_cs2(e, rhob);
   double Mnrm = n.Mnrm();
   double v = Mnrm / (n.E + n.p);
+  if (v >= 1.) {
+    std::cout << "idealHydroCell: velocity is greater than 1" << std::endl;
+    std::abort();
+  }
   double gamma = 1. / sqrt(1. - v * v);
   for (int i = 0; i < VischydroNode::dim; i++) {
     n.u[i] = gamma * n.M[i] / (n.E + n.p);
@@ -61,20 +65,11 @@ double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n,
   double abstol = 1.e-15;
   double reltol = 1.e-8;
   double e = ein;
-  double v = n.Mnrm() / (n.E + n.p);
-  if (v >= 1.) {
-    std::cout << "idealHydroCell: velocity is greater than 1" << std::endl;
-    std::abort();
-  }
-  double gamma = 1. / sqrt(1. - v * v);
-  for (int i = 0; i < VischydroNode::dim; i++) {
-    n.u[i] = gamma * n.M[i] / (n.E + n.p);
-  }
   double f = idealHydroCellIFunction(e, n, eos);
+  double v = n.Mnrm() / (n.E + n.p);
   int it = 0;
   const int maxit = 100;
   while (it < maxit) {
-    // std::cout << "f = " << f << std::endl;
     if (std::abs(f) < abstol or std::abs(f / e) < reltol) {
       break;
     }
