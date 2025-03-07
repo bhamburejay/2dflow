@@ -1,22 +1,20 @@
 {
-    "grid" : {
-        "nx":64,
-        "ny":64,
-        "stencil_width": 2
+    "time_settings": {
+        "t_start": 0.1,
+        "t_end": 1.0,
+        "dt": 0.01
     },
-
-    "physical_size":{
-        "Lx":1.0,
-        "Ly":1.0
-
+    "grid": {
+        "nx": 100,
+        "ny": 100,
+        "stencil_width": 1
     },
-    "initial_conditions":{
-        "amplitude":1.0,
-        "sigma":0.1
+    "physical_size": {
+        "Lx": 10.0,
+        "Ly": 10.0
     },
-
-    "time": {
-        "dt": 0.0001,
-        "output_interval": 100
+    "initial_conditions": {
+        "amplitude": 1.0,
+        "sigma": 1000.0
     }
 }
