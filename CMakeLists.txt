@@ -37,6 +37,8 @@ add_executable(test_vischydronode.exe src/test_vischydronode.cpp ${SOURCES})
 add_executable(coordinatetest.exe work/coordinatetest.cpp ${SOURCES})
 add_executable(2dflow.exe work/2dflow.cpp ${SOURCES})
 add_executable(test_gaus.exe work/test_gaus.cpp ${SOURCES})
+add_executable(temporary.exe work/temporary.cpp ${SOURCES})
+
 
 target_link_libraries(test_json.exe PkgConfig::PETSC)
 target_link_libraries(test_mpi1.exe PkgConfig::PETSC)
@@ -46,3 +48,4 @@ target_link_libraries(test_vischydronode.exe PkgConfig::PETSC)
 target_link_libraries(coordinatetest.exe PkgConfig::PETSC)
 target_link_libraries(2dflow.exe PkgConfig::PETSC)
 target_link_libraries(test_gaus.exe PkgConfig::PETSC)
+target_link_libraries(temporary.exe PkgConfig::PETSC)
