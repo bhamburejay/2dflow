@@ -44,4 +44,4 @@ def plot_energy_vs_time(hdf5_path):
     plt.grid(True)
     plt.show()
 
-plot_energy_vs_time('energy_out.h5')
+plot_energy_vs_time('/home/jay/Desktop/Research/2dflow/build/energy_out.h5')

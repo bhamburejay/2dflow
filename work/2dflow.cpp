@@ -89,11 +89,19 @@ int main(int argc, char **argv) {
     Ly = input["physical_size"]["Ly"].asDouble();
     E0 = input["initial_conditions"]["amplitude"].asDouble();
     sigma = input["initial_conditions"]["sigma"].asDouble();
-    t_start = input["time_settings"]["dt"].asDouble();
-    t_end = input["time_settings"]["dt"].asDouble();
+    t_start = input["time_settings"]["t_start"].asDouble();
+    t_end = input["time_settings"]["t_end"].asDouble();
     dt = input["time_settings"]["dt"].asDouble();
     dx = Lx / (nx - 1);
     dy = Ly / (ny - 1);
+
+    if (rank == 0) {
+    std::cout << "Loaded parameters:\n"
+              << "Amplitude: " << E0 << "\n"
+              << "t_start: " << t_start << "\n"
+              << "t_end: " << t_end << "\n"
+              << "dt: " << dt << std::endl;
+    }
 
     /*2d grid with ghosted boundary conditions -> this means, the values of the real boundary cells 
     are copied to ghost cells, micking neumann boundary conditions */
