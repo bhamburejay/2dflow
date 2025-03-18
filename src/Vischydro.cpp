@@ -1,22 +1,25 @@
 #include "Vischydro.hpp"
 #include "EOS.hpp"
 
+// Presently this function take in E,M and returns dE/dt and dM/dt
+// NOTE TO SELF: Need to change this to primitive variable e
 PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   const Vischydro &run = *(Vischydro *)ctx;
   auto eos = run.eos;
 
-  // Copy the U into a local array including the boundary values
+  // Copy the global solution to local solutions including the boundary values
   DMGlobalToLocalBegin(run.domain, U, INSERT_VALUES, run.local_solution);
   DMGlobalToLocalEnd(run.domain, U, INSERT_VALUES, run.local_solution);
 
-  // Get pointer to local array
-  VischydroNode **asol;
+  // Get current 2d grid i.e E, M
+  VischydroNode **asol;       //asol: accessed soln
   DMDAVecGetArray(run.domain, run.local_solution, &asol);
-  VischydroNode **ag;
+  // 2d grid to store dE/dt and dM/dt
+  VischydroNode **ag;         //ag: accessed gradient
   DMDAVecGetArray(run.domain, G, &ag);
 
   // Loop over grid points and calculate RHS
-  PetscInt xs, ys, xm, ym;
+  PetscInt xs, ys, xm, ym; 
   VecZeroEntries(G);
   DMDAGetCorners(run.domain, &xs, &ys, NULL, &xm, &ym, NULL);
   for (PetscInt j = ys; j < ys + ym; j++) {
@@ -36,10 +39,10 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   return 0;
 }
 
+// contructor
 Vischydro::Vischydro(Json::Value &config, const EOS *eosin)
     : configuration(config), eos(eosin) {
   // Extract parameters from JSON
-  // Change these lines to get_input()
   nx = get_input({"grid", "nx"}).asInt();
   ny = get_input({"grid", "ny"}).asInt();
   xmin = get_input({"grid", "xmin"}).asDouble();

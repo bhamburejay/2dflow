@@ -7,10 +7,8 @@ void set_gaussian_initialconditions(Vischydro &hy) {
   auto &input = hy.configuration;
   const EOS &eos = *hy.eos;
 
-  double E0 =
-      hy.get_input({"gaussian_initial_conditions", "amplitude"}).asDouble();
-  double sigma =
-      hy.get_input({"gaussian_initial_conditions", "sigma"}).asDouble();
+  double E0 = hy.get_input({"gaussian_initial_conditions", "amplitude"}).asDouble();
+  double sigma =  hy.get_input({"gaussian_initial_conditions", "sigma"}).asDouble();
 
   auto &da = hy.domain;
   auto &solution = hy.solution;
@@ -28,7 +26,16 @@ void set_gaussian_initialconditions(Vischydro &hy) {
   DMDAVecGetArray(cda, coordinates, &coords);
 
   for (PetscInt j = ys; j < ys + ym; j++) {
-    for (PetscInt i = xs; i < xs + xm; i++) {
+    for (PetscInt i = xs; i < xs + xm; i++) {  auto &input = hy.configuration;
+  const EOS &eos = *hy.eos;
+
+  double E0 = hy.get_input({"gaussian_initial_conditions", "amplitude"}).asDouble();
+  double sigma =  hy.get_input({"gaussian_initial_conditions", "sigma"}).asDouble();
+
+  auto &da = hy.domain;
+  auto &solution = hy.solution;
+  auto &cda = hy.cdomain;
+  auto &coordinates = hy.coordinates;
       PetscReal x = coords[j][i].x;
       PetscReal y = coords[j][i].y;
 

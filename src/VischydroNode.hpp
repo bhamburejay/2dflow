@@ -9,7 +9,7 @@
 struct VischydroNode {
   static const int dim = 2;
   static const int Ncharge = 3;
-  static const int NDOF = 9;
+  static const int NDOF = 9;  
   PetscScalar E;
   PetscScalar M[dim];
   PetscScalar e;
