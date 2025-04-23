@@ -33,7 +33,7 @@ PetscErrorCode RHSFunction(TS ts, PetscReal t, Vec E, Vec F, void *ctx) {
     return 0;
 }
 
-// Saving data to HDF5. NOTE TO SELF: Need TO SELF restructure this part
+// Saving data to HDF5. NOTE TO SELF: Need TO SELF: restructure this part
 void SaveSolution(Vec E, PetscReal t) {
     PetscViewer viewer;
     const PetscFileMode mode = (t == 0.0) ? FILE_MODE_WRITE : FILE_MODE_APPEND;
@@ -87,8 +87,8 @@ int main(int argc, char **argv) {
     static const int stencil_width = input["grid"]["stencil_width"].asInt();
     Lx = input["physical_size"]["Lx"].asDouble();
     Ly = input["physical_size"]["Ly"].asDouble();
-    E0 = input["initial_conditions"]["amplitude"].asDouble();
-    sigma = input["initial_conditions"]["sigma"].asDouble();
+    E0 = input["gaussian_initial_conditions"]["amplitude"].asDouble();
+    sigma = input["gaussian_initial_conditions"]["sigma"].asDouble();
     t_start = input["time_settings"]["t_start"].asDouble();
     t_end = input["time_settings"]["t_end"].asDouble();
     dt = input["time_settings"]["dt"].asDouble();
