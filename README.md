@@ -59,3 +59,18 @@ then run the python file work/2dflow_plot.py
 
 In the end you should get an exponentially decreasing plot
 
+# For running files in the new_2dflow/
+
+# Compiling vischydro code
+```
+mpicxx -o Vischydro `pkg-config --cflags petsc` Vischydro.cpp jsoncpp.cpp  `pkg-config --libs petsc`
+```
+# Compiling 1d_grid
+```
+mpicxx -o 2dflow_main `pkg-config --cflags petsc` 2dflow_main.cpp jsoncpp.cpp  `pkg-config --libs petsc`
+```
+# Compiling create_initial
+```
+mpicxx -o initial_condition `pkg-config --cflags petsc` initial_condition.cpp jsoncpp.cpp  `pkg-config --libs petsc`
+```
+
