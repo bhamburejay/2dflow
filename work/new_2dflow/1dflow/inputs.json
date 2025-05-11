@@ -1,0 +1,17 @@
+{
+    "NDOF": 7,
+    "NX": 201,
+    "xmin": -60.0,
+    "xmax": 60.0,
+    "initial_time": 0.1,
+    "final_time": 50.0,
+    "cfl_max": 0.49,
+    "eta_over_s": 0.07957747154594767,
+    "iofilename": "vischydro_fig1.h5",
+    "steps_per_print": 10,
+    "dt": 0.01,
+    "stencil_width": 2,
+    "Lx": 10.0,
+    "amplitude": 5.0,
+    "sigma": 2.0
+}
