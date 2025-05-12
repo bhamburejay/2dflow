@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import h5py
 
-def plot_initial(tag='tgauss'):
+def plot_initial(tag='2dflow_test'):
     # Load the data in initial.h5 the dataset is called output
     with h5py.File(tag + '_initial.h5', 'r') as f:
         coordinates = f['coordinates'][:]
@@ -15,8 +15,8 @@ def plot_initial(tag='tgauss'):
         plt.gca().set_aspect('equal', adjustable='box')
         plt.contourf(X, Y, data2)
 
-def plot_central_evolution(tag='tgauss'):
-    # Load the data in initial.h5 the dataset is called output
+def plot_central_evolution(tag='2dflow_test'):
+    # Load the data in grid.h5 the dataset is called output
     with h5py.File(tag + '_grid.h5', 'r') as f:
         coordinates = f['coordinates'][:]
         print(coordinates.shape)
@@ -28,9 +28,10 @@ def plot_central_evolution(tag='tgauss'):
         plt.figure()
         plt.gca().set_xlabel('t')
         plt.gca().set_ylabel('E')
-        plt.plot(t, e, '.', t, e[0]*(t[0]/t)**(4./3.))
+        plt.plot(t, e, '.')
+        # plt.plot(t, e[0]*(t[0]/t)**(4./3.))  # Theoretical decay (disabled)
 
-#plot_initial()
+plot_initial()
 plot_central_evolution()
 plt.show()
     

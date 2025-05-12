@@ -1,6 +1,7 @@
 #include "Vischydro.hpp"
 #include <fstream>
 #include <iostream>
+#include <algorithm>
 
 void set_gaussian_initialconditions(Vischydro &hy) {
 
@@ -127,28 +128,63 @@ void RunCode() {
 
   std::unique_ptr<EOS> eos = std::make_unique<EOS>();
   std::unique_ptr<Vischydro> vischydro =
-      std::make_unique<Vischydro>(input, eos.get());
+  std::make_unique<Vischydro>(input, eos.get());
 
   set_gaussian_initialconditions(*vischydro.get());
 
   std::string run_name = vischydro->get_inputs({"run_name"}).asString();
   vischydro->save(run_name + "_initial.h5");
 
+  // ====== CFL TIME STEP CONTROL ====== //
+  DM da = vischydro->domain;
+  Vec solution = vischydro->solution;
+  VischydroNode **nodes;
+  DMDAVecGetArray(da, solution, &nodes);
+
+  double max_vel = 0.0;
+  PetscInt xs, ys, xm, ym;
+  DMDAGetCorners(da, &xs, &ys, NULL, &xm, &ym, NULL);
+
+  for (PetscInt j = ys; j < ys + ym; j++) {
+      for (PetscInt i = xs; i < xs + xm; i++) {
+          const auto& node = nodes[j][i];
+          double vx = node.vx();
+          double vy = node.vy();
+          max_vel = std::max({max_vel, std::abs(vx), std::abs(vy)});
+      }
+  }
+  DMDAVecRestoreArray(da, solution, &nodes);
+
+  double global_max_vel;
+  MPI_Allreduce(&max_vel, &global_max_vel, 1, MPI_DOUBLE, MPI_MAX, PETSC_COMM_WORLD);
+
+  double dt_cfl;
+  if (global_max_vel < 1e-12) {
+      dt_cfl = vischydro->get_inputs({"time_settings", "dt"}).asDouble();
+      PetscPrintf(PETSC_COMM_WORLD, 
+          "WARNING: Zero initial velocity. Using dt=%.3e from input\n", dt_cfl
+      );
+  } else {
+      dt_cfl = 0.4 * std::min(vischydro->dx, vischydro->dy) / (global_max_vel + 1e-12);
+  }
+
+  TSSetTimeStep(vischydro->stepper, dt_cfl);
+  TSSetMaxSteps(vischydro->stepper, 100000);
+  // ====== END CFL CODE ====== //
+
+
   // Add a monitor to the stepper to print out the grid
   GridMonitorContext gctx(vischydro.get());
   TSMonitorSet(vischydro->stepper, VischydroGridMonitor, &gctx, NULL);
 
-  double t_start =
-      vischydro->get_inputs({"time_settings", "t_start"}).asDouble();
+  double t_start = vischydro->get_inputs({"time_settings", "t_start"}).asDouble();
   double t_end = vischydro->get_inputs({"time_settings", "t_end"}).asDouble();
   double dt = vischydro->get_inputs({"time_settings", "dt"}).asDouble();
 
   int ierr;
   ierr = TSSetTime(vischydro->stepper, t_start);
-  ierr = TSSetTimeStep(vischydro->stepper, dt);
   ierr = TSSetMaxTime(vischydro->stepper, t_end);
   TSSetFromOptions(vischydro->stepper);
-
   TSSolve(vischydro->stepper, vischydro->solution);
 
   vischydro->save(run_name + "_final.h5");
