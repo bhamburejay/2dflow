@@ -26,6 +26,7 @@ include_directories(${PETSC_INCLUDE_DIRS})
 
 # List the sources 
 set(SOURCES src/jsoncpp.cpp src/VischydroNode.cpp src/Vischydro.cpp)
+#set(MY_SOURCES work/new_2dflow/VischydroNode.hpp work/new_2dflow/Vischydro.hpp work/new_2dflow/jsoncpp.cpp)
 
 # Add an executable based on the sources
 add_executable(test_json.exe src/test_json.cpp ${SOURCES})
@@ -34,11 +35,10 @@ add_executable(test_mpi1.exe src/test_mpi1.cpp ${SOURCES})
 add_executable(test_petsc1.exe src/test_petsc1.cpp ${SOURCES})
 add_executable(test_petsc2.exe src/test_petsc2.cpp ${SOURCES})
 add_executable(test_vischydronode.exe src/test_vischydronode.cpp ${SOURCES})
-add_executable(coordinatetest.exe work/coordinatetest.cpp ${SOURCES})
-add_executable(2dflow.exe work/2dflow.cpp ${SOURCES})
+add_executable(coordinatetest.exe work/old_2dflow/coordinatetest.cpp ${SOURCES})
+add_executable(2dflow.exe work/old_2dflow/2dflow.cpp ${SOURCES})
 add_executable(test_gauss.exe src/test_gauss.cpp ${SOURCES})
-#add_executable(temporary.exe work/temporary.cpp ${SOURCES})
-
+#add_executable(2dflow_main.exe work/new_2dflow/2dflow_main.cpp ${MY_SOURCES})
 
 target_link_libraries(test_json.exe PkgConfig::PETSC)
 target_link_libraries(test_mpi1.exe PkgConfig::PETSC)
@@ -48,4 +48,4 @@ target_link_libraries(test_vischydronode.exe PkgConfig::PETSC)
 target_link_libraries(coordinatetest.exe PkgConfig::PETSC)
 target_link_libraries(2dflow.exe PkgConfig::PETSC)
 target_link_libraries(test_gauss.exe PkgConfig::PETSC)
-#target_link_libraries(temporary.exe PkgConfig::PETSC)
+#target_link_libraries(2dflow_main.exe PkgConfig::PETSC)

@@ -67,7 +67,8 @@ mpicxx -o Vischydro `pkg-config --cflags petsc` Vischydro.cpp jsoncpp.cpp  `pkg-
 ```
 # Compiling 1d_grid
 ```
-mpicxx -o 2dflow_main `pkg-config --cflags petsc` 2dflow_main.cpp jsoncpp.cpp  `pkg-config --libs petsc`
+mpicxx -o 2dflow_main `pkg-config --cflags petsc` 2dflow_main.cpp VischydroNode.cpp Vischydro.cpp `pkg-config --libs petsc` -ljsoncpp
+
 ```
 # Compiling create_initial
 ```
