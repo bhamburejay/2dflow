@@ -15,7 +15,7 @@ void FillVischydroNode(VischydroNode &node, const EOS &eos) {
   for (int i = 0; i < VischydroNode::dim; i++) {
     node.M[i] = (e + node.p) * u0 * node.u[i];
   }
-}
+} 
 //
 // Returns the function which should be zero if the energy density and velocity
 // u[] are consistent with E and M[] and the EOS. E and M are not modified in
@@ -61,8 +61,7 @@ double idealHydroCellIFunctionDerivative(const double &e,
 // method. The starting value for the Newton iteration is ein. The final energy
 // density is returned, and the pressure, beta, and cs2 are modified, and the
 // node is filled with the values of the EOS. However, E and M are not modified.
-double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n,
-                           const EOS &eos) {
+double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n, const EOS &eos) {
   double abstol = 1.e-15;
   double reltol = 1.e-8;
   double e = ein;
@@ -80,10 +79,12 @@ double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n,
     it++;
   }   
   if (it == maxit) {
-    std::cout << "idealHydroCell: Newton's method did not converge"
-              << std::endl;
+    std::cout << "idealHydroCell: Newton's method did not converge" << std::endl;
     std::abort();
   }
+  // after convergence updates
+  n.e = e;
+  FillVischydroNode(n, eos);
   return e;
 }
 

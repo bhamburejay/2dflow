@@ -75,34 +75,38 @@ public:
   limitter(const int &imethod = limitter::kCenteredMinMod) : method(imethod){};
 };
 
-
 // X-direction HLL flux
-std::array<double, 3> computeHLLFluxX(const VischydroNode& nL, const VischydroNode& nR, double ap,double am) {
-    auto FL = nL.fluxX();
-    auto FR = nR.fluxX();
-    auto qL = nL.charge();
-    auto qR = nR.charge();
-    
-    std::array<double, 3> F{};
-    for (int j=0; j<3; j++) {
-        F[j] = (ap*FL[j] + am*FR[j] - ap*am*(qR[j]-qL[j]))/(ap + am + 1e-12);
-    }
-    return F;
+std::array<double, 3> computeHLLFluxX(const VischydroNode& nL, const VischydroNode& nR, double ap, double am) {
+  auto FL = nL.fluxX();
+  auto FR = nR.fluxX();
+  auto qL = nL.charge();
+  auto qR = nR.charge();
+
+  std::array<double, 3> F{};
+  double denom = ap - am;
+  if (denom == 0.0) denom = 1e-12;  
+  for (int j = 0; j < 3; ++j) {
+    F[j] = ( ap*FL[j] - am*FR[j] + ap*am*( qR[j] - qL[j] )) / denom;
+  }
+  return F;
 }
 
 // Y-direction HLL flux
 std::array<double, 3> computeHLLFluxY(const VischydroNode& nL, const VischydroNode& nR, double ap, double am) {
-    auto FL = nL.fluxY();
-    auto FR = nR.fluxY();
-    auto qL = nL.charge();
-    auto qR = nR.charge();
-    
-    std::array<double, 3> F{};
-    for (int j=0; j<3; j++) {
-        F[j] = (ap*FL[j] + am*FR[j] - ap*am*(qR[j]-qL[j]))/(ap + am + 1e-12);
-    }
-    return F;
+  auto FL = nL.fluxY();
+  auto FR = nR.fluxY();
+  auto qL = nL.charge();
+  auto qR = nR.charge();
+
+  std::array<double, 3> F{};
+  double denom = ap - am;
+  if (denom == 0.0) denom = 1e-12;  
+  for (int j = 0; j < 3; ++j) {
+      F[j] = ( ap*FL[j] - am*FR[j] + ap*am*( qR[j] - qL[j] )) / denom;
+  }
+  return F;
 }
+
 
 PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
     Vischydro &run = *(Vischydro *)ctx;
@@ -143,8 +147,7 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
             FillVischydroNode(nR_x, *run.eos);
 
             // Compute x-flux
-            auto [ap_x, am_x] = propagationVelocity(nL_x.cs2, nL_x.u[0], nL_x.u0(),
-                                                    nR_x.cs2, nR_x.u[0], nR_x.u0());
+            auto [ap_x, am_x] = propagationVelocity(nL_x.cs2, nL_x.u[0], nL_x.u0(), nR_x.cs2, nR_x.u[0], nR_x.u0());
             std::array F_x = computeHLLFluxX(nL_x, nR_x, ap_x, am_x);
 
             // Update residuals for x-direction
@@ -207,7 +210,7 @@ Vischydro::Vischydro(Json::Value &config, const EOS *eosin)
 
   const int stencil_width = 2;
   // 2d grid with ghosted boundary conditions
-  DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC,
+  DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED,
                DMDA_STENCIL_STAR, nx, ny, PETSC_DECIDE, PETSC_DECIDE,
                VischydroNode::NDOF, stencil_width, NULL, NULL, &domain);
   DMSetFromOptions(domain);

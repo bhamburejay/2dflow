@@ -46,6 +46,7 @@ void set_gaussian_initialconditions(Vischydro &hy) {
       n.M[1] = 0.0;
       double ein = n.E;
       idealHydroCellSolve(ein, n, eos);
+      PetscPrintf(PETSC_COMM_WORLD, "Post-solve E: %.3e\n", n.E);  // Should match
     }
   }
   // Restore array
