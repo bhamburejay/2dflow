@@ -73,7 +73,7 @@ double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n, const 
     if (std::abs(f) < abstol or std::abs(f / e) < reltol) {
       break;
     }
-    double df = idealHydroCellIFunctionDerivative(e, n, eos);
+    double df = idealHydroCellIFunctionDerivative(e, n, eos);       
     e -= f / df;
     f = idealHydroCellIFunction(e, n, eos);
     it++;
@@ -82,9 +82,6 @@ double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n, const 
     std::cout << "idealHydroCell: Newton's method did not converge" << std::endl;
     std::abort();
   }
-  // after convergence updates
-  n.e = e;
-  FillVischydroNode(n, eos);
   return e;
 }
 

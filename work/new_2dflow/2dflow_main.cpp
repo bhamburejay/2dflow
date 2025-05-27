@@ -46,7 +46,7 @@ void set_gaussian_initialconditions(Vischydro &hy) {
       n.M[1] = 0.0;
       double ein = n.E;
       idealHydroCellSolve(ein, n, eos);
-      PetscPrintf(PETSC_COMM_WORLD, "Post-solve E: %.3e\n", n.E);  // Should match
+      PetscPrintf(PETSC_COMM_WORLD, "Post-solve E: %.3e\n", n.E);
     }
   }
   // Restore array
@@ -128,8 +128,7 @@ void RunCode() {
   }
 
   std::unique_ptr<EOS> eos = std::make_unique<EOS>();
-  std::unique_ptr<Vischydro> vischydro =
-  std::make_unique<Vischydro>(input, eos.get());
+  std::unique_ptr<Vischydro> vischydro = std::make_unique<Vischydro>(input, eos.get());
 
   set_gaussian_initialconditions(*vischydro.get());
 
