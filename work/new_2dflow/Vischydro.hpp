@@ -13,40 +13,30 @@
 class Vischydro {
 
 public:
-  int nx;
-  int ny;
-  double dx;
-  double dy;
-  double xmin;
-  double xmax;
-  double ymin;
-  double ymax;
+  // grid parameters
+  int nx, ny;
+  double dx, dy, xmin, xmax, ymin, ymax;
 
+  // PETSc objects
   Json::Value &configuration;
-  DM domain;
-  Vec solution;
-  Vec local_solution;
+  DM domain, cdomain;
+  Vec solution, coordinates, local_solution;
   TS stepper;
   const EOS *eos;
 
-  DM cdomain;
-  Vec coordinates;
-
   Vischydro(Json::Value &config, const EOS *eosin);
-
   ~Vischydro() {
     TSDestroy(&stepper);
     VecDestroy(&local_solution);
     VecDestroy(&solution);
     DMDestroy(&domain);
-  }
+  };
 
   // Save the current grid to a file using HDF5. The filename is optional and
   // defaults to output.h5
   void save(const std::string filename = "output.h5") {
     PetscViewer viewer;
-    PetscViewerHDF5Open(PETSC_COMM_WORLD, filename.c_str(), FILE_MODE_WRITE,
-                        &viewer);
+    PetscViewerHDF5Open(PETSC_COMM_WORLD, filename.c_str(), FILE_MODE_WRITE, &viewer);
     PetscObjectSetName((PetscObject)solution, "output");
     VecView(solution, viewer);
     PetscObjectSetName((PetscObject)coordinates, "coordinates");
@@ -69,8 +59,7 @@ public:
   void print_grid_dimensions() {
     std::cout << "Grid dimensions: " << nx << " " << ny << std::endl;
     std::cout << "Grid spacing: " << dx << " " << dy << std::endl;
-    std::cout << "Grid range: " << xmin << " " << xmax << " " << ymin << " "
-              << ymax << std::endl;
+    std::cout << "Grid range: " << xmin << " " << xmax << " " << ymin << " " << ymax << std::endl;
   }
 
   // Usage is Vischydro::get_input({"level2", "name"}).asString() for a Json

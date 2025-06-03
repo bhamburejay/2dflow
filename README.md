@@ -59,19 +59,28 @@ then run the python file work/2dflow_plot.py
 
 In the end you should get an exponentially decreasing plot
 
+# To check for memory corruption or leaks
+```
+valgrind --leak-check=full ./filename.exe 
+```
+
 # For running files in the new_2dflow/
+
+# compile test_node
+```
+mpicxx -o test_node.exe `pkg-config --cflags petsc` test_node.cpp VischydroNode.cpp `pkg-config --libs petsc` -ljsoncpp
+```
+
+# compile test_vischydro
+```
+mpicxx -o test_vischydro.exe `pkg-config --cflags petsc` test_vischydro.cpp Vischydro.cpp VischydroNode.cpp `pkg-config --libs petsc` -ljsoncpp
+```
 
 # Compiling vischydro code
 ```
-mpicxx -o Vischydro `pkg-config --cflags petsc` Vischydro.cpp jsoncpp.cpp  `pkg-config --libs petsc`
+mpicxx -o Vischydro.exe `pkg-config --cflags petsc` Vischydro.cpp jsoncpp.cpp  `pkg-config --libs petsc`
 ```
-# Compiling 1d_grid
+# Compiling 2d_grid
 ```
-mpicxx -o 2dflow_main `pkg-config --cflags petsc` 2dflow_main.cpp VischydroNode.cpp Vischydro.cpp `pkg-config --libs petsc` -ljsoncpp
-
+mpicxx -o 2dflow_main.exe `pkg-config --cflags petsc` 2dflow_main.cpp VischydroNode.cpp Vischydro.cpp `pkg-config --libs petsc` -ljsoncpp
 ```
-# Compiling create_initial
-```
-mpicxx -o initial_condition `pkg-config --cflags petsc` initial_condition.cpp jsoncpp.cpp  `pkg-config --libs petsc`
-```
-

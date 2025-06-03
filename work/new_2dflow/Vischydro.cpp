@@ -107,21 +107,21 @@ std::array<double, 3> computeHLLFluxY(const VischydroNode& nL, const VischydroNo
   return F;
 }
 
-// U is the current global solution vector, G is the global RHS vector
+// U is the current global solution vector, G is the global RHS vector  
 PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
     Vischydro &run = *(Vischydro *)ctx;
     
-    // Copy the U into a local array including the boundary values
+    // Copy global solution vec, U to a local vec including ghost cells
     DMGlobalToLocalBegin(run.domain, U, INSERT_VALUES, run.local_solution);
     DMGlobalToLocalEnd(run.domain, U, INSERT_VALUES, run.local_solution);
 
-    // Get pointer to local array
+    // "convert" PETSc vectors to 2d c-style arrays for indexing
     VischydroNode **asol;
     DMDAVecGetArray(run.domain, run.local_solution, &asol);
     VischydroNode **ag;
     DMDAVecGetArray(run.domain, G, &ag);
 
-    // Get 2D grid parameters
+    // Setup the local grids at each processor
     int ixs, ixm, iys, iym;
     DMDAGetCorners(run.domain, &ixs, &iys, 0, &ixm, &iym, 0);
 
@@ -129,7 +129,7 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
     const double epsilon = 1e-8;
     limitter slope(limitter::kCenteredMinMod);
 
-    // Solve for the internal state
+    // Solve for the primitve variables in each cell
     for (int j = iys; j < iys + iym + 1; j++){
       for (int i = ixs-2; i < ixs + ixm +2; i++) {
         idealHydroCellSolve(asol[j][i].e, asol[j][i], *run.eos);
@@ -162,7 +162,7 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
             auto [ap_x, am_x] = propagationVelocity(nL_x.cs2, nL_x.u[0], nL_x.u0(), nR_x.cs2, nR_x.u[0], nR_x.u0());
             std::array F_x = computeHLLFluxX(nL_x, nR_x, ap_x, am_x);
 
-            // Update residuals for x-direction
+            // Update RHS for x-direction
             ag[j][i].E   -= F_x[0]/dx;
             ag[j][i].M[0]  -= F_x[1]/dx;
             ag[j][i-1].E += F_x[0]/dx;
@@ -186,7 +186,7 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
             auto [ap_y, am_y] = propagationVelocity(nL_y.cs2, nL_y.u[1], nL_y.u0(), nR_y.cs2, nR_y.u[1], nR_y.u0());
             std::array F_y = computeHLLFluxY(nL_y, nR_y, ap_y, am_y);
 
-            // Update residuals for y-direction
+            // Update RHS for y-direction
             ag[j][i].E   -= F_y[0]/dy;
             ag[j][i].M[1]  -= F_y[2]/dy;
             ag[j-1][i].E += F_y[0]/dy;
@@ -203,8 +203,7 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
 }
 
 // contructor
-Vischydro::Vischydro(Json::Value &config, const EOS *eosin)
-    : configuration(config), eos(eosin) {
+Vischydro::Vischydro(Json::Value &config, const EOS *eosin) : configuration(config), eos(eosin) {
   // Extract parameters from JSON
   nx = get_inputs({"grid", "nx"}).asInt();
   ny = get_inputs({"grid", "ny"}).asInt();

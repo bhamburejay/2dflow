@@ -4,55 +4,61 @@
 #include <algorithm>
 
 void set_gaussian_initialconditions(Vischydro &hy) {
+    auto &input = hy.configuration;
+    const EOS &eos = *hy.eos;
+    double E0 = hy.get_inputs({"gaussian_initial_conditions", "amplitude"}).asDouble();
+    double sigma = hy.get_inputs({"gaussian_initial_conditions", "sigma"}).asDouble();
 
-  auto &input = hy.configuration;
-  const EOS &eos = *hy.eos;
+    // Create LOCAL vector (with ghost cells) for initialization
+    Vec local_solution;
+    DMCreateLocalVector(hy.domain, &local_solution);
+    
+    // Get access to local array (including ghost cells)
+    VischydroNode **nodes;
+    DMDAVecGetArray(hy.domain, local_solution, &nodes);
 
-  double E0 = hy.get_inputs({"gaussian_initial_conditions", "amplitude"}).asDouble();
-  double sigma =  hy.get_inputs({"gaussian_initial_conditions", "sigma"}).asDouble();
+    // Get coordinates
+    DMDACoor2d **coords;
+    DMDAVecGetArray(hy.cdomain, hy.coordinates, &coords);
 
-  auto &da = hy.domain;
-  auto &solution = hy.solution;
-  auto &cda = hy.cdomain;
-  auto &coordinates = hy.coordinates;
+    // Get local grid bounds
+    PetscInt xs, ys, xm, ym;
+    DMDAGetCorners(hy.domain, &xs, &ys, NULL, &xm, &ym, NULL);
 
-  VischydroNode **nodes; // Class that defines required nodes
-
-  // capture local grid info in a given process
-  PetscInt xs, ys, xm, ym;
-  DMDAGetCorners(da, &xs, &ys, NULL, &xm, &ym, NULL);
-  DMDAVecGetArray(da, solution, &nodes);
-
-  DMDACoor2d **coords;
-  DMDAVecGetArray(cda, coordinates, &coords);
-
-  for (PetscInt j = ys; j < ys + ym; j++) {
-    for (PetscInt i = xs; i < xs + xm; i++) {  auto &input = hy.configuration;
-  const EOS &eos = *hy.eos;
-
-  double E0 = hy.get_inputs({"gaussian_initial_conditions", "amplitude"}).asDouble();
-  double sigma =  hy.get_inputs({"gaussian_initial_conditions", "sigma"}).asDouble();
-
-  auto &da = hy.domain;
-  auto &solution = hy.solution;
-  auto &cda = hy.cdomain;
-  auto &coordinates = hy.coordinates;
-      PetscReal x = coords[j][i].x;
-      PetscReal y = coords[j][i].y;
-
-      auto &n = nodes[j][i];
-      n.E = E0 * std::exp(-(x * x + y * y) / (2 * sigma * sigma));
-      n.M[0] = 0.0;
-      n.M[1] = 0.0;
-      double ein = n.E;
-      idealHydroCellSolve(ein, n, eos);
-      PetscPrintf(PETSC_COMM_WORLD, "Post-solve E: %.3e\n", n.E);
+    // Initialize owned cells (excluding ghost cells)
+    for (PetscInt j = ys; j < ys + ym; j++) {
+        for (PetscInt i = xs; i < xs + xm; i++) {
+            PetscReal x = coords[j][i].x;
+            PetscReal y = coords[j][i].y;
+            auto &n = nodes[j][i];
+            
+            // Set initial conditions
+            n.E = E0 * std::exp(-(x*x + y*y)/(2*sigma*sigma));
+            n.M[0] = 0.0;
+            n.M[1] = 0.0;
+            
+            // Solve for primitive variables
+            double ein = n.E;
+            idealHydroCellSolve(ein, n, eos);
+        }
     }
-  }
-  // Restore array
-  DMDAVecRestoreArray(da, solution, &nodes);
-  DMDAVecRestoreArray(cda, coordinates, &coords);
+
+    // Restore arrays
+    DMDAVecRestoreArray(hy.domain, local_solution, &nodes);
+    DMDAVecRestoreArray(hy.cdomain, hy.coordinates, &coords);
+
+    // Copy local (with ghosts) -> global (without ghosts)
+    DMLocalToGlobalBegin(hy.domain, local_solution, INSERT_VALUES, hy.solution);
+    DMLocalToGlobalEnd(hy.domain, local_solution, INSERT_VALUES, hy.solution);
+
+    // Update ghost cells in local vector from global
+    DMGlobalToLocalBegin(hy.domain, hy.solution, INSERT_VALUES, local_solution);
+    DMGlobalToLocalEnd(hy.domain, hy.solution, INSERT_VALUES, local_solution);
+
+    // Cleanup
+    VecDestroy(&local_solution);
 }
+
 
 // This is a class to write out the grid to a file. It is used to write out the
 // grid to an HDF5 file run_name_grid.h5 which contains the grid and an ascii
@@ -95,8 +101,7 @@ public:
 // This is a monitor function that is called at each timestep by the TS Object
 // It is used to write out the solution and works with GridMonitorContext to
 // write out the grid.
-PetscErrorCode VischydroGridMonitor(TS ts, PetscInt step, PetscReal time, Vec u,
-                                    void *mctx) {
+PetscErrorCode VischydroGridMonitor(TS ts, PetscInt step, PetscReal time, Vec u, void *mctx) {
 
   auto monitor = (GridMonitorContext *)mctx;
 
@@ -114,6 +119,7 @@ PetscErrorCode VischydroGridMonitor(TS ts, PetscInt step, PetscReal time, Vec u,
 }
 
 void RunCode() {
+  
   // Open the input file and parse the inputs into Json::Value
   char filename[PETSC_MAX_PATH_LEN] = "input.json";
   PetscOptionsGetString(NULL, NULL, "-input", filename, sizeof(filename), NULL);
@@ -122,8 +128,7 @@ void RunCode() {
   if (ifs) {
     ifs >> input;
   } else {
-    PetscPrintf(PETSC_COMM_WORLD, "Unable to open input file %s. Aborting...\n",
-                filename);
+    PetscPrintf(PETSC_COMM_WORLD, "Unable to open input file %s. Aborting...\n", filename);
     return;
   }
 
@@ -169,7 +174,7 @@ void RunCode() {
   }
 
   TSSetTimeStep(vischydro->stepper, dt_cfl);
-  TSSetMaxSteps(vischydro->stepper, 100000);
+  TSSetMaxSteps(vischydro->stepper, 1000);
   // ====== END CFL CODE ====== //
 
 
