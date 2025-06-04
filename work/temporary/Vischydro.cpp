@@ -143,10 +143,10 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
     // Main 2D loop
     // since we are calculating the flux across the cell interfaces, if there are
     // N cells, we need to calculate the flux at N+1 interfaces, including the boundaries.
-    for (int j = iys; j < iys + iym + 1; j++) {
-      for (int i = ixs; i < ixs + ixm + 1; i++) {
+     for (int j = iys; j < iys + iym; j++) {
+      for (int i = ixs; i < ixs + ixm; i++) {
         // X-direction flux calculation --------------------------------
-        if (i < run.get_inputs({"grid", "nx"}).asInt() - 1) {
+        if (i > ixs && i < run.get_inputs({"grid", "nx"}).asInt()) {
             // Reconstruct left/right states in x-direction
             nL_x.e = asol[j][i-1].e + 0.5 * slope(asol[j][i-2].e, asol[j][i-1].e, asol[j][i].e);
             nL_x.u[0] = asol[j][i-1].u[0] + 0.5 * slope(asol[j][i-2].u[0], asol[j][i-1].u[0], asol[j][i].u[0]);
@@ -172,7 +172,7 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
         }
 
         // Y-direction flux calculation --------------------------------
-        if (j < run.get_inputs({"grid", "ny"}).asInt() - 1) {
+        if (j > iys && j < run.get_inputs({"grid", "ny"}).asInt()) {
             // Reconstruct top/bottom states in y-direction
             nL_y.e = asol[j-1][i].e + 0.5 * slope(asol[j-2][i].e, asol[j-1][i].e, asol[j][i].e);
             nL_y.u[0] = asol[j-1][i].u[0] + 0.5 * slope(asol[j-2][i].u[0], asol[j-1][i].u[0], asol[j][i].u[0]);

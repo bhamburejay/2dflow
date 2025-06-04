@@ -64,7 +64,19 @@ double idealHydroCellIFunctionDerivative(const double &e,
   double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n, const EOS &eos, int j, int i) {
   double abstol = 1.e-15;
   double reltol = 1.e-8;
-  double e = ein;
+  
+  // Handle vacuum cells explicitly to avoid division by zero
+  if (std::abs(n.E) < 1e-14 && n.Mnrm() < 1e-14) {
+    n.e = 0.0;
+    n.p = 0.0;
+    n.beta = 0.0;
+    n.cs2 = eos.get_cs2(0.0, 0.0);
+    n.u[0] = 0.0;
+    n.u[1] = 0.0;
+    return 0.0;
+  }
+
+  double e = std::max(ein, 1e-14);
   double f = idealHydroCellIFunction(e, n, eos);
   double v = n.Mnrm() / (n.E + n.p);
   int it = 0;
