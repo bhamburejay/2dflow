@@ -20,8 +20,7 @@ void FillVischydroNode(VischydroNode &node, const EOS &eos) {
 // Returns the function which should be zero if the energy density and velocity
 // u[] are consistent with E and M[] and the EOS. E and M are not modified in
 // this function, but the pressure, beta, and cs2 are.
-double idealHydroCellIFunction(const double &e, /* out */ VischydroNode &n,
-                               const EOS &eos) {
+double idealHydroCellIFunction(const double &e, /* out */ VischydroNode &n, const EOS &eos) {
   double rhob = 0.;
   n.e = e;
   n.p = eos.get_pressure(e, rhob);

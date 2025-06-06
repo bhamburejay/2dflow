@@ -8,8 +8,8 @@
 
 class EOS {
  private:
-     double Nc;
-     double Nf;
+    double Nc;
+    double Nf;
    
  public:
     EOS(double Nc_in=3, double Nf_in=0) : Nc(Nc_in),  Nf(Nf_in) {;}

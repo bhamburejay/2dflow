@@ -4,59 +4,59 @@
 #include <algorithm>
 
 void set_gaussian_initialconditions(Vischydro &hy) {
-    auto &input = hy.configuration;
-    const EOS &eos = *hy.eos;
-    double E0 = hy.get_inputs({"gaussian_initial_conditions", "amplitude"}).asDouble();
-    double sigma = hy.get_inputs({"gaussian_initial_conditions", "sigma"}).asDouble();
+  auto &input = hy.configuration;
+  const EOS &eos = *hy.eos;
+  double E0 = hy.get_inputs({"gaussian_initial_conditions", "amplitude"}).asDouble();
+  double sigma = hy.get_inputs({"gaussian_initial_conditions", "sigma"}).asDouble();
 
-    // Create LOCAL vector (with ghost cells) for initialization
-    Vec local_solution;
-    DMCreateLocalVector(hy.domain, &local_solution);
-    
-    // Get access to local array (including ghost cells)
-    VischydroNode **nodes;
-    DMDAVecGetArray(hy.domain, local_solution, &nodes);
+  // Create LOCAL vector (with ghost cells) for initialization
+  Vec local_solution;
+  DMCreateLocalVector(hy.domain, &local_solution);
+  
+  // Get access to local array (including ghost cells)
+  VischydroNode **nodes;
+  DMDAVecGetArray(hy.domain, local_solution, &nodes);
 
-    // Get coordinates
-    DMDACoor2d **coords;
-    DMDAVecGetArray(hy.cdomain, hy.coordinates, &coords);
+  // Get coordinates
+  DMDACoor2d **coords;
+  DMDAVecGetArray(hy.cdomain, hy.coordinates, &coords);
 
-    // Get local grid bounds
-    PetscInt xs, ys, xm, ym;
-    DMDAGetCorners(hy.domain, &xs, &ys, NULL, &xm, &ym, NULL);
+  // Get local grid bounds
+  PetscInt xs, ys, xm, ym;
+  DMDAGetCorners(hy.domain, &xs, &ys, NULL, &xm, &ym, NULL);
 
-    // Initialize owned cells (excluding ghost cells)
-    for (PetscInt j = ys; j < ys + ym; j++) {
-        for (PetscInt i = xs; i < xs + xm; i++) {
-            PetscReal x = coords[j][i].x;
-            PetscReal y = coords[j][i].y;
-            auto &n = nodes[j][i];
-            
-            // Set initial conditions
-            n.E = E0 * std::exp(-(x*x + y*y)/(2*sigma*sigma));
-            n.M[0] = 0.0;
-            n.M[1] = 0.0;
-            
-            // Solve for primitive variables
-            double ein = n.E;
-            idealHydroCellSolve(ein, n, eos);
-        }
+  // Initialize owned cells (excluding ghost cells)
+  for (PetscInt j = ys; j < ys + ym; j++) {
+    for (PetscInt i = xs; i < xs + xm; i++) {
+      PetscReal x = coords[j][i].x;
+      PetscReal y = coords[j][i].y;
+      auto &n = nodes[j][i];
+      
+      // Set initial conditions
+      n.E = E0 * std::exp(-(x*x + y*y)/(2*sigma*sigma));
+      n.M[0] = 0.0;
+      n.M[1] = 0.0;
+      
+      // Solve for primitive variables
+      double ein = n.E;
+      idealHydroCellSolve(ein, n, eos);
     }
+  }
 
-    // Restore arrays
-    DMDAVecRestoreArray(hy.domain, local_solution, &nodes);
-    DMDAVecRestoreArray(hy.cdomain, hy.coordinates, &coords);
+  // Restore arrays
+  DMDAVecRestoreArray(hy.domain, local_solution, &nodes);
+  DMDAVecRestoreArray(hy.cdomain, hy.coordinates, &coords);
 
-    // Copy local (with ghosts) -> global (without ghosts)
-    DMLocalToGlobalBegin(hy.domain, local_solution, INSERT_VALUES, hy.solution);
-    DMLocalToGlobalEnd(hy.domain, local_solution, INSERT_VALUES, hy.solution);
+  // Copy local (with ghosts) -> global (without ghosts)
+  DMLocalToGlobalBegin(hy.domain, local_solution, INSERT_VALUES, hy.solution);
+  DMLocalToGlobalEnd(hy.domain, local_solution, INSERT_VALUES, hy.solution);
 
-    // Update ghost cells in local vector from global
-    DMGlobalToLocalBegin(hy.domain, hy.solution, INSERT_VALUES, local_solution);
-    DMGlobalToLocalEnd(hy.domain, hy.solution, INSERT_VALUES, local_solution);
+  // Update ghost cells in local vector from global
+  DMGlobalToLocalBegin(hy.domain, hy.solution, INSERT_VALUES, local_solution);
+  DMGlobalToLocalEnd(hy.domain, hy.solution, INSERT_VALUES, local_solution);
 
-    // Cleanup
-    VecDestroy(&local_solution);
+  // Cleanup
+  VecDestroy(&local_solution);
 }
 
 
@@ -78,8 +78,7 @@ public:
   std::ofstream ascii_file;
 
   GridMonitorContext(Vischydro *run_in) : run(run_in) {
-    print_frequency =
-        run->get_inputs({"VischydroGridMonitor", "print_frequency"}).asInt();
+    print_frequency = run->get_inputs({"VischydroGridMonitor", "print_frequency"}).asInt();
 
     // Create the HDF5 viewer  run_name + "_grid.h5"
     std::string run_name = run->get_inputs({"run_name"}).asString();
@@ -141,40 +140,40 @@ void RunCode() {
   vischydro->save(run_name + "_initial.h5");
 
   // ====== CFL TIME STEP CONTROL ====== //
-  DM da = vischydro->domain;
-  Vec solution = vischydro->solution;
-  VischydroNode **nodes;
-  DMDAVecGetArray(da, solution, &nodes);
+  // DM da = vischydro->domain;
+  // Vec solution = vischydro->solution;
+  // VischydroNode **nodes;
+  // DMDAVecGetArray(da, solution, &nodes);
 
-  double max_vel = 0.0;
-  PetscInt xs, ys, xm, ym;
-  DMDAGetCorners(da, &xs, &ys, NULL, &xm, &ym, NULL);
+  // double max_vel = 0.0;
+  // PetscInt xs, ys, xm, ym;
+  // DMDAGetCorners(da, &xs, &ys, NULL, &xm, &ym, NULL);
 
-  for (PetscInt j = ys; j < ys + ym; j++) {
-      for (PetscInt i = xs; i < xs + xm; i++) {
-          const auto& node = nodes[j][i];
-          double vx = node.vx();
-          double vy = node.vy();
-          max_vel = std::max({max_vel, std::abs(vx), std::abs(vy)});
-      }
-  }
-  DMDAVecRestoreArray(da, solution, &nodes);
+  // for (PetscInt j = ys; j < ys + ym; j++) {
+  //     for (PetscInt i = xs; i < xs + xm; i++) {
+  //         const auto& node = nodes[j][i];
+  //         double vx = node.vx();
+  //         double vy = node.vy();
+  //         max_vel = std::max({max_vel, std::abs(vx), std::abs(vy)});
+  //     }
+  // }
+  // DMDAVecRestoreArray(da, solution, &nodes);
 
-  double global_max_vel;
-  MPI_Allreduce(&max_vel, &global_max_vel, 1, MPI_DOUBLE, MPI_MAX, PETSC_COMM_WORLD);
+  // double global_max_vel;
+  // MPI_Allreduce(&max_vel, &global_max_vel, 1, MPI_DOUBLE, MPI_MAX, PETSC_COMM_WORLD);
 
-  double dt_cfl;
-  if (global_max_vel < 1e-12) {
-      dt_cfl = vischydro->get_inputs({"time_settings", "dt"}).asDouble();
-      PetscPrintf(PETSC_COMM_WORLD, 
-          "WARNING: Zero initial velocity. Using dt=%.3e from input\n", dt_cfl
-      );
-  } else {
-      dt_cfl = 0.4 * std::min(vischydro->dx, vischydro->dy) / (global_max_vel + 1e-12);
-  }
+  // double dt_cfl;
+  // if (global_max_vel < 1e-12) {
+  //     dt_cfl = vischydro->get_inputs({"time_settings", "dt"}).asDouble();
+  //     PetscPrintf(PETSC_COMM_WORLD, 
+  //         "WARNING: Zero initial velocity. Using dt=%.3e from input\n", dt_cfl
+  //     );
+  // } else {
+  //     dt_cfl = 0.4 * std::min(vischydro->dx, vischydro->dy) / (global_max_vel + 1e-12);
+  // }
 
-  TSSetTimeStep(vischydro->stepper, dt_cfl);
-  TSSetMaxSteps(vischydro->stepper, 1000);
+  // TSSetTimeStep(vischydro->stepper, dt_cfl);
+  // TSSetMaxSteps(vischydro->stepper, 10000);
   // ====== END CFL CODE ====== //
 
 

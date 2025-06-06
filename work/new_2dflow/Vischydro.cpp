@@ -107,92 +107,129 @@ std::array<double, 3> computeHLLFluxY(const VischydroNode& nL, const VischydroNo
   return F;
 }
 
+// simpler RHS function for trial
+// PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
+//   const Vischydro &run = *(Vischydro *)ctx;
+//   auto eos = run.eos;
+
+//   // Copy the global solution to local solutions including the boundary values
+//   DMGlobalToLocalBegin(run.domain, U, INSERT_VALUES, run.local_solution);
+//   DMGlobalToLocalEnd(run.domain, U, INSERT_VALUES, run.local_solution);
+
+//   // Get current 2d grid i.e E, M
+//   VischydroNode **asol;       //asol: accessed soln
+//   DMDAVecGetArray(run.domain, run.local_solution, &asol);
+//   // 2d grid to store dE/dt and dM/dt
+//   VischydroNode **ag;
+//   DMDAVecGetArray(run.domain, G, &ag);
+
+//   // Loop over grid points and calculate RHS
+//   PetscInt xs, ys, xm, ym; 
+//   VecZeroEntries(G);
+//   DMDAGetCorners(run.domain, &xs, &ys, NULL, &xm, &ym, NULL);
+//   for (PetscInt j = ys; j < ys + ym; j++) {
+//     for (PetscInt i = xs; i < xs + xm; i++) {
+//       // Calculate RH
+//       double pr = eos->get_pressure(asol[j][i].e, asol[j][i].Mnrm());
+//       double e = asol[j][i].e;
+//       ag[j][i].E = -(E + pr) / t;
+//       ag[j][i].M[0] = 0.0;
+//       ag[j][i].M[1] = 0.0;
+//     }
+//   }
+
+//   // Return the pointer to the local array back to the memory space
+//   DMDAVecRestoreArray(run.domain, run.local_solution, &asol);
+//   DMDAVecRestoreArray(run.domain, G, &ag);
+//   return 0;
+// }
+
 // U is the current global solution vector, G is the global RHS vector  
 PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
-    Vischydro &run = *(Vischydro *)ctx;
-    
-    // Copy global solution vec, U to a local vec including ghost cells
-    DMGlobalToLocalBegin(run.domain, U, INSERT_VALUES, run.local_solution);
-    DMGlobalToLocalEnd(run.domain, U, INSERT_VALUES, run.local_solution);
+  Vischydro &run = *(Vischydro *)ctx;
+  
+  // Copy global solution vec, U to a local vec including ghost cells
+  DMGlobalToLocalBegin(run.domain, U, INSERT_VALUES, run.local_solution);
+  DMGlobalToLocalEnd(run.domain, U, INSERT_VALUES, run.local_solution);
 
-    // "convert" PETSc vectors to 2d c-style arrays for indexing
-    VischydroNode **asol;
-    DMDAVecGetArray(run.domain, run.local_solution, &asol);
-    VischydroNode **ag;
-    DMDAVecGetArray(run.domain, G, &ag);
+  // "convert" PETSc vectors to 2d c-style arrays for indexing
+  VischydroNode **asol;
+  DMDAVecGetArray(run.domain, run.local_solution, &asol);
+  VischydroNode **ag;
+  DMDAVecGetArray(run.domain, G, &ag);
 
-    // Setup the local grids at each processor
-    int ixs, ixm, iys, iym;
-    DMDAGetCorners(run.domain, &ixs, &iys, 0, &ixm, &iym, 0);
+  // Setup the local grids at each processor
+  int ixs, ixm, iys, iym;
+  DMDAGetCorners(run.domain, &ixs, &iys, 0, &ixm, &iym, 0);
 
-    const double dx = run.dx, dy = run.dy;
-    const double epsilon = 1e-8;
-    limitter slope(limitter::kCenteredMinMod);
+  const double dx = run.dx, dy = run.dy;
+  const double epsilon = 1e-8;
+  limitter slope(limitter::kCenteredMinMod);
 
-    // Solve for the primitve variables in each cell
-    for (int j = iys; j < iys + iym + 1; j++){
-      for (int i = ixs-2; i < ixs + ixm +2; i++) {
-        idealHydroCellSolve(asol[j][i].e, asol[j][i], *run.eos);
+  // Solve for the primitve variables in each cell
+  for (int j = iys; j < iys + iym + 1; j++){
+    for (int i = ixs-2; i < ixs + ixm +2; i++) {
+      idealHydroCellSolve(asol[j][i].e, asol[j][i], *run.eos);
+    }
+  }
+  
+
+  VecZeroEntries(G);
+  VischydroNode nL_x{}, nR_x{}, nL_y{}, nR_y{};
+
+  // Main 2D loop
+  // since we are calculating the flux across the cell interfaces, if there are
+  // N cells, we need to calculate the flux at N+1 interfaces, including the boundaries.
+  for (int j = iys; j < iys + iym; j++) {
+    for (int i = ixs; i < ixs + ixm; i++) {
+      // X-direction flux calculation --------------------------------
+      if (i < run.get_inputs({"grid", "nx"}).asInt() - 1) {
+        // Reconstruct left/right states in x-direction
+        nL_x.e = asol[j][i-1].e + 0.5 * slope(asol[j][i-2].e, asol[j][i-1].e, asol[j][i].e);
+        nL_x.u[0] = asol[j][i-1].u[0] + 0.5 * slope(asol[j][i-2].u[0], asol[j][i-1].u[0], asol[j][i].u[0]);
+        nL_x.u[1] = asol[j][i-1].u[1] + 0.5 * slope(asol[j][i-2].u[1], asol[j][i-1].u[1], asol[j][i].u[1]);
+        FillVischydroNode(nL_x, *run.eos);
+
+        nR_x.e = asol[j][i].e - 0.5 * slope(asol[j][i-1].e, asol[j][i].e, asol[j][i+1].e);
+        nR_x.u[0] = asol[j][i].u[0] - 0.5 * slope(asol[j][i-1].u[0], asol[j][i].u[0], asol[j][i+1].u[0]);
+        nR_x.u[1] = asol[j][i].u[1] - 0.5 * slope(asol[j][i-1].u[1], asol[j][i].u[1], asol[j][i+1].u[1]);
+        FillVischydroNode(nR_x, *run.eos);
+
+        // Compute numerical x-flux
+        auto [ap_x, am_x] = propagationVelocity(nL_x.cs2, nL_x.u[0], nL_x.u0(), nR_x.cs2, nR_x.u[0], nR_x.u0());
+        std::array F_x = computeHLLFluxX(nL_x, nR_x, ap_x, am_x);
+
+        // Update RHS for x-direction
+        ag[j][i].E   -= F_x[0]/dx;
+        ag[j][i].M[0]  -= F_x[1]/dx + F_x[2]/dx;
+        ag[j][i-1].E += F_x[0]/dx;
+        ag[j][i-1].M[0] += F_x[1]/dx + F_x[2]/dx;
+      }
+
+      // Y-direction flux calculation --------------------------------
+      if (j < run.get_inputs({"grid", "ny"}).asInt() - 1) {
+        // Reconstruct top/bottom states in y-direction
+        nL_y.e = asol[j-1][i].e + 0.5 * slope(asol[j-2][i].e, asol[j-1][i].e, asol[j][i].e);
+        nL_y.u[0] = asol[j-1][i].u[0] + 0.5 * slope(asol[j-2][i].u[0], asol[j-1][i].u[0], asol[j][i].u[0]);
+        nL_y.u[1] = asol[j-1][i].u[1] + 0.5 * slope(asol[j-2][i].u[1], asol[j-1][i].u[1], asol[j][i].u[1]);;
+        FillVischydroNode(nL_y, *run.eos);
+
+        nR_y.e = asol[j][i].e - 0.5 * slope(asol[j-1][i].e, asol[j][i].e, asol[j+1][i].e);
+        nR_y.u[0] = asol[j][i].u[0] - 0.5 * slope(asol[j-1][i].u[0], asol[j][i].u[0], asol[j+1][i].u[0]);
+        nR_y.u[1] = asol[j][i].u[1] - 0.5 * slope(asol[j-1][i].u[1], asol[j][i].u[1], asol[j+1][i].u[1]);
+        FillVischydroNode(nR_y, *run.eos);
+
+        // Compute numerical y-flux
+        auto [ap_y, am_y] = propagationVelocity(nL_y.cs2, nL_y.u[1], nL_y.u0(), nR_y.cs2, nR_y.u[1], nR_y.u0());
+        std::array F_y = computeHLLFluxY(nL_y, nR_y, ap_y, am_y);
+
+        // Update RHS for y-direction
+        ag[j][i].E   -= F_y[0]/dy;
+        ag[j][i].M[1]  -= F_y[1]/dx + F_y[2]/dy;
+        ag[j-1][i].E += F_y[0]/dy;
+        ag[j-1][i].M[1] += F_y[1]/dx + F_y[2]/dy;
       }
     }
-    
-
-    VecZeroEntries(G);
-    VischydroNode nL_x{}, nR_x{}, nL_y{}, nR_y{};
-
-    // Main 2D loop
-    // since we are calculating the flux across the cell interfaces, if there are
-    // N cells, we need to calculate the flux at N+1 interfaces, including the boundaries.
-    for (int j = iys; j < iys + iym + 1; j++) {
-      for (int i = ixs; i < ixs + ixm + 1; i++) {
-        // X-direction flux calculation --------------------------------
-        if (i < run.get_inputs({"grid", "nx"}).asInt() - 1) {
-            // Reconstruct left/right states in x-direction
-            nL_x.e = asol[j][i-1].e + 0.5 * slope(asol[j][i-2].e, asol[j][i-1].e, asol[j][i].e);
-            nL_x.u[0] = asol[j][i-1].u[0] + 0.5 * slope(asol[j][i-2].u[0], asol[j][i-1].u[0], asol[j][i].u[0]);
-            nL_x.u[1] = asol[j][i-1].u[1] + 0.5 * slope(asol[j][i-2].u[1], asol[j][i-1].u[1], asol[j][i].u[1]);
-            FillVischydroNode(nL_x, *run.eos);
-
-            nR_x.e = asol[j][i].e - 0.5 * slope(asol[j][i-1].e, asol[j][i].e, asol[j][i+1].e);
-            nR_x.u[0] = asol[j][i].u[0] - 0.5 * slope(asol[j][i-1].u[0], asol[j][i].u[0], asol[j][i+1].u[0]);
-            nR_x.u[1] = asol[j][i].u[1] - 0.5 * slope(asol[j][i-1].u[1], asol[j][i].u[1], asol[j][i+1].u[1]);
-            FillVischydroNode(nR_x, *run.eos);
-
-            // Compute numerical x-flux
-            auto [ap_x, am_x] = propagationVelocity(nL_x.cs2, nL_x.u[0], nL_x.u0(), nR_x.cs2, nR_x.u[0], nR_x.u0());
-            std::array F_x = computeHLLFluxX(nL_x, nR_x, ap_x, am_x);
-
-            // Update RHS for x-direction
-            ag[j][i].E   -= F_x[0]/dx;
-            ag[j][i].M[0]  -= F_x[1]/dx;
-            ag[j][i-1].E += F_x[0]/dx;
-            ag[j][i-1].M[0] += F_x[1]/dx;
-        }
-
-        // Y-direction flux calculation --------------------------------
-        if (j < run.get_inputs({"grid", "ny"}).asInt() - 1) {
-            // Reconstruct top/bottom states in y-direction
-            nL_y.e = asol[j-1][i].e + 0.5 * slope(asol[j-2][i].e, asol[j-1][i].e, asol[j][i].e);
-            nL_y.u[0] = asol[j-1][i].u[0] + 0.5 * slope(asol[j-2][i].u[0], asol[j-1][i].u[0], asol[j][i].u[0]);
-            nL_y.u[1] = asol[j-1][i].u[1] + 0.5 * slope(asol[j-2][i].u[1], asol[j-1][i].u[1], asol[j][i].u[1]);;
-            FillVischydroNode(nL_y, *run.eos);
-
-            nR_y.e = asol[j][i].e - 0.5 * slope(asol[j-1][i].e, asol[j][i].e, asol[j+1][i].e);
-            nR_y.u[0] = asol[j][i].u[0] - 0.5 * slope(asol[j-1][i].u[0], asol[j][i].u[0], asol[j+1][i].u[0]);
-            nR_y.u[1] = asol[j][i].u[1] - 0.5 * slope(asol[j-1][i].u[1], asol[j][i].u[1], asol[j+1][i].u[1]);
-            FillVischydroNode(nR_y, *run.eos);
-
-            // Compute numerical y-flux
-            auto [ap_y, am_y] = propagationVelocity(nL_y.cs2, nL_y.u[1], nL_y.u0(), nR_y.cs2, nR_y.u[1], nR_y.u0());
-            std::array F_y = computeHLLFluxY(nL_y, nR_y, ap_y, am_y);
-
-            // Update RHS for y-direction
-            ag[j][i].E   -= F_y[0]/dy;
-            ag[j][i].M[1]  -= F_y[2]/dy;
-            ag[j-1][i].E += F_y[0]/dy;
-            ag[j-1][i].M[1] += F_y[2]/dy;
-        }
-      }
   }
 
   // Return the pointer to the local array back to the memory space
