@@ -164,11 +164,11 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
 
             // Update RHS for x-direction
             ag[j][i].E    -= F_x[0]/dx;
-            ag[j][i].M[0] -= F_x[1]/dx;
-            ag[j][i].M[1] -= F_x[2]/dx;
+            ag[j][i].M[0] -= F_x[1]/dx + F_x[2]/dx;
+            ag[j][i].M[1] -= F_x[2]/dx + F_x[1]/dx;
             ag[j][i-1].E  += F_x[0]/dx;
-            ag[j][i-1].M[0]+= F_x[1]/dx;
-            ag[j][i-1].M[1]+= F_x[2]/dx;
+            ag[j][i-1].M[0]+= F_x[1]/dx + F_x[2]/dx;
+            ag[j][i-1].M[1]+= F_x[2]/dx + F_x[1]/dx;
         }
 
         // Y-direction flux calculation --------------------------------
@@ -190,11 +190,11 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
 
             // Update RHS for y-direction
             ag[j][i].E    -= F_y[0]/dy;
-            ag[j][i].M[0] -= F_y[1]/dy;
-            ag[j][i].M[1] -= F_y[2]/dy;
+            ag[j][i].M[0] -= F_y[1]/dy + F_y[2]/dy;
+            ag[j][i].M[1] -= F_y[2]/dy + F_y[1]/dy;
             ag[j-1][i].E  += F_y[0]/dy;
-            ag[j-1][i].M[0]+= F_y[1]/dy;
-            ag[j-1][i].M[1]+= F_y[2]/dy;
+            ag[j-1][i].M[0]+= F_y[1]/dy + F_y[2]/dy;
+            ag[j-1][i].M[1]+= F_y[2]/dy + F_y[1]/dy;
         }
       }
   }
