@@ -1,4 +1,5 @@
 #include "VischydroNode.hpp"
+#include <cmath>
 
 // FillVischydroNode is a function that fills the VischydroNode with the values
 // of the EOS, starting from the energy density e and the velocity u[]. The
@@ -29,9 +30,14 @@ double idealHydroCellIFunction(const double &e, /* out */ VischydroNode &n,
   n.cs2 = eos.get_cs2(e, rhob);
   double Mnrm = n.Mnrm();
   double v = Mnrm / (n.E + n.p);
-  if (v >= 1.) {
-    std::cout << "idealHydroCell: velocity is greater than 1" << std::endl;
-    std::abort();
+  if (v >= 1. || (n.E + n.p) <= 0.0) {
+    std::cerr << "idealHydroCell: velocity is greater than 1 -- treating as vacuum" << std::endl;
+    for (int i = 0; i < VischydroNode::dim; i++) n.u[i] = 0.0;
+    n.e = 0.0;
+    n.p = 0.0;
+    n.beta = 0.0;
+    n.cs2 = eos.get_cs2(0.0, 0.0);
+    return 0.0;
   }
   double gamma = 1. / sqrt(1. - v * v);
   for (int i = 0; i < VischydroNode::dim; i++) {
@@ -79,6 +85,13 @@ double idealHydroCellIFunctionDerivative(const double &e,
   double e = std::max(ein, 1e-14);
   double f = idealHydroCellIFunction(e, n, eos);
   double v = n.Mnrm() / (n.E + n.p);
+  if (!std::isfinite(v) || v >= 1.0 || (n.E + n.p) <= 0.0) {
+    std::cerr << "idealHydroCell: invalid initial state at cell (" << j
+              << ", " << i << ") -- treating as vacuum" << std::endl;
+    n.zero();
+    n.cs2 = eos.get_cs2(0.0, 0.0);
+    return 0.0;
+  }
   int it = 0;
   const int maxit = 100;
   while (it < maxit) {
@@ -88,15 +101,22 @@ double idealHydroCellIFunctionDerivative(const double &e,
     double df = idealHydroCellIFunctionDerivative(e, n, eos);       
     e -= f / df;
     f = idealHydroCellIFunction(e, n, eos);
+    v = n.Mnrm() / (n.E + n.p);
+    if (!std::isfinite(v) || v >= 1.0 || (n.E + n.p) <= 0.0) {
+      std::cerr << "idealHydroCell: invalid state during iteration at cell ("
+                << j << ", " << i << ") -- treating as vacuum" << std::endl;
+      n.zero();
+      n.cs2 = eos.get_cs2(0.0, 0.0);
+      return 0.0;
+    }
     it++;
   }   
   if (it == maxit) {
-    std::cerr << "idealHydroCell: Newton's method did not converge";
-    if (j >= 0 && i >= 0)
-      std::cerr << " at cell (" << j << ", " << i << ")";
-    std::cerr << std::endl;
-    n.print("Node state");
-    std::abort();
+    std::cerr << "idealHydroCell: Newton's method did not converge at cell ("
+              << j << ", " << i << ") -- treating as vacuum" << std::endl;
+    n.zero();
+    n.cs2 = eos.get_cs2(0.0, 0.0);
+    return 0.0;
   }
   return e;
 }

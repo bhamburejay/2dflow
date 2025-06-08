@@ -15,7 +15,7 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   VischydroNode **asol;       //asol: accessed soln
   DMDAVecGetArray(run.domain, run.local_solution, &asol);
   // 2d grid to store dE/dt and dM/dt
-  VischydroNode **ag;         //ag: accessed gradient
+  VischydroNode **ag;
   DMDAVecGetArray(run.domain, G, &ag);
 
   // Loop over grid points and calculate RHS

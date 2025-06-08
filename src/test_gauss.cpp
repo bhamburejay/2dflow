@@ -126,8 +126,7 @@ void RunCode() {
   }
 
   std::unique_ptr<EOS> eos = std::make_unique<EOS>();
-  std::unique_ptr<Vischydro> vischydro =
-      std::make_unique<Vischydro>(input, eos.get());
+  std::unique_ptr<Vischydro> vischydro = std::make_unique<Vischydro>(input, eos.get());
 
   set_gaussian_initialconditions(*vischydro.get());
 
@@ -138,8 +137,7 @@ void RunCode() {
   GridMonitorContext gctx(vischydro.get());
   TSMonitorSet(vischydro->stepper, VischydroGridMonitor, &gctx, NULL);
 
-  double t_start =
-      vischydro->get_input({"time_settings", "t_start"}).asDouble();
+  double t_start = vischydro->get_input({"time_settings", "t_start"}).asDouble();
   double t_end = vischydro->get_input({"time_settings", "t_end"}).asDouble();
   double dt = vischydro->get_input({"time_settings", "dt"}).asDouble();
 
