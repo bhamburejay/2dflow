@@ -33,8 +33,8 @@ void set_gaussian_initialconditions(Vischydro &hy) {
       auto &n = nodes[j][i];
       n.print("Before initialization");
       // Set initial conditions
-      n.E = 10.0;
-      n.u[0] = 0.6;
+      n.E = E0* exp(-(x*x + y*y) / (2*sigma*sigma));
+      n.u[0] = 1.6;
       //std::cout << "ux = " << n.u[0] << std::endl;
       // Solve for primitive variables
       double ein = n.E;
@@ -119,7 +119,7 @@ PetscErrorCode VischydroGridMonitor(TS ts, PetscInt step, PetscReal time, Vec u,
 
 void RunCode() {
   
-  // Open the input file and parse the inputs into Json::Value
+  // Open the input file and parse the parameters into Json::Value
   char filename[PETSC_MAX_PATH_LEN] = "input.json";
   PetscOptionsGetString(NULL, NULL, "-input", filename, sizeof(filename), NULL);
   Json::Value input;
@@ -130,6 +130,12 @@ void RunCode() {
     PetscPrintf(PETSC_COMM_WORLD, "Unable to open input file %s. Aborting...\n", filename);
     return;
   }
+
+  PetscPrintf(PETSC_COMM_WORLD, "Contents of input JSON:\n");
+  Json::StreamWriterBuilder writer;
+  writer["indentation"] = "  "; // Pretty print with indentation
+  std::string json_str = Json::writeString(writer, input);
+  PetscPrintf(PETSC_COMM_WORLD, "%s\n", json_str.c_str());
 
   std::unique_ptr<EOS> eos = std::make_unique<EOS>();
   std::unique_ptr<Vischydro> vischydro = std::make_unique<Vischydro>(input, eos.get());
