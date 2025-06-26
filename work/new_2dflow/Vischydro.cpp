@@ -165,14 +165,25 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   const double dx = run.dx, dy = run.dy;
   const double epsilon = 1e-8;
   limitter slope(limitter::kCenteredMinMod);
+  
+  // std::cout << "E_{RHS} = " << asol[0][0].E << std::endl;
 
   // Solve for the primitve variables in each cell
-  for (int j = iys; j < iys + iym + 1; j++){
+  for (int j = iys; j < iys + iym; j++){
     for (int i = ixs-2; i < ixs + ixm +2; i++) {
-      idealHydroCellSolve(asol[j][i].e, asol[j][i], *run.eos);
+      std::cout << "i= " << i << " j = " << j << std::endl;
+      std::cout << "E_{RHS} = " << asol[j][i].E << std::endl;
+      idealHydroCellSolve(asol[j][i].E, asol[j][i], *run.eos);
     }
   }
   
+  for (int j = iys -2; j < iys + iym + 2; j++){
+    for (int i = ixs; i < ixs + ixm; i++) {
+      std::cout << "i= " << i << " j = " << j << std::endl;
+      std::cout << "E_{RHS} = " << asol[j][i].E << std::endl;
+      idealHydroCellSolve(asol[j][i].E, asol[j][i], *run.eos);
+    }
+  }
 
   VecZeroEntries(G);
   VischydroNode nL_x{}, nR_x{}, nL_y{}, nR_y{};
@@ -181,60 +192,77 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   // since we are calculating the flux across the cell interfaces, if there are
   // N cells, we need to calculate the flux at N+1 interfaces, including the boundaries.
   for (int j = iys; j < iys + iym; j++) {
-    for (int i = ixs; i < ixs + ixm; i++) {
+    for (int i = ixs -1; i < ixs + ixm ; i++) {
+      std::cout << "here i = " << i << " j = " << j << std::endl;
       // X-direction flux calculation --------------------------------
+      // Reconstruct left/right states in x-direction
+      nL_x.e = asol[j][i].e + 0.5 * slope(asol[j][i-1].e, asol[j][i].e, asol[j][i+1].e);
+      nL_x.u[0] = asol[j][i].u[0] + 0.5 * slope(asol[j][i-1].u[0], asol[j][i].u[0], asol[j][i+1].u[0]);
+      nL_x.u[1] = asol[j][i].u[1] + 0.5 * slope(asol[j][i-1].u[1], asol[j][i].u[1], asol[j][i+1].u[1]);
+      FillVischydroNode(nL_x, *run.eos);
+
+      nR_x.e = asol[j][i+1].e - 0.5 * slope(asol[j][i].e, asol[j][i+1].e, asol[j][i+2].e);
+      nR_x.u[0] = asol[j][i+1].u[0] - 0.5 * slope(asol[j][i].u[0], asol[j][i+1].u[0], asol[j][i+2].u[0]);
+      nR_x.u[1] = asol[j][i+1].u[1] - 0.5 * slope(asol[j][i].u[1], asol[j][i+1].u[1], asol[j][i+2].u[1]);
+      FillVischydroNode(nR_x, *run.eos);
+      std::cout << "nL_x.e = " << nL_x.e << " nR_x.e = " << nR_x.e << std::endl;
+      
+      // Compute numerical x-flux
+      auto [ap_x, am_x] = propagationVelocity(nL_x.cs2, nL_x.u[0], nL_x.u0(), nR_x.cs2, nR_x.u[0], nR_x.u0());
+      std::array F_x = computeHLLFluxX(nL_x, nR_x, ap_x, am_x);
+      
+      // if statements for handling end cells
       if (i < run.get_inputs({"grid", "nx"}).asInt() - 1) {
-        // Reconstruct left/right states in x-direction
-        nL_x.e = asol[j][i-1].e + 0.5 * slope(asol[j][i-2].e, asol[j][i-1].e, asol[j][i].e);
-        nL_x.u[0] = asol[j][i-1].u[0] + 0.5 * slope(asol[j][i-2].u[0], asol[j][i-1].u[0], asol[j][i].u[0]);
-        nL_x.u[1] = asol[j][i-1].u[1] + 0.5 * slope(asol[j][i-2].u[1], asol[j][i-1].u[1], asol[j][i].u[1]);
-        FillVischydroNode(nL_x, *run.eos);
-
-        nR_x.e = asol[j][i].e - 0.5 * slope(asol[j][i-1].e, asol[j][i].e, asol[j][i+1].e);
-        nR_x.u[0] = asol[j][i].u[0] - 0.5 * slope(asol[j][i-1].u[0], asol[j][i].u[0], asol[j][i+1].u[0]);
-        nR_x.u[1] = asol[j][i].u[1] - 0.5 * slope(asol[j][i-1].u[1], asol[j][i].u[1], asol[j][i+1].u[1]);
-        FillVischydroNode(nR_x, *run.eos);
-
-        // Compute numerical x-flux
-        auto [ap_x, am_x] = propagationVelocity(nL_x.cs2, nL_x.u[0], nL_x.u0(), nR_x.cs2, nR_x.u[0], nR_x.u0());
-        std::array F_x = computeHLLFluxX(nL_x, nR_x, ap_x, am_x);
-
-        // Update RHS for x-direction
+        ag[j][i+1].E += F_x[0]/dx;
+        ag[j][i+1].M[0] -= F_x[1]/dx;
+        ag[j][i+1].M[1] -= F_x[2]/dx;
+      }
+      else if (i >= 0){
         ag[j][i].E    -= F_x[0]/dx;
         ag[j][i].M[0] -= F_x[1]/dx;
         ag[j][i].M[1] -= F_x[2]/dx;
-        ag[j][i-1].E    += F_x[0]/dx;
-        ag[j][i-1].M[0] += F_x[1]/dx;
-        ag[j][i-1].M[1] += F_x[2]/dx;
       }
+      else {}
+      // Update RHS for x-direction
+      ag[j][i].E    -= F_x[0]/dx;
+      ag[j][i].M[0] -= F_x[1]/dx;
+      ag[j][i].M[1] -= F_x[2]/dx;
+      ag[j][i-1].E    += F_x[0]/dx;
+      ag[j][i-1].M[0] += F_x[1]/dx;
+      ag[j][i-1].M[1] += F_x[2]/dx;
+      std::cout << "ag[" << j << "][" << i << "].E = " << ag[j][i].E 
+                << " ag[" << j << "][" << i-1 << "].E = " << ag[j][i-1].E << std::endl;
+    
+    // Y-direction flux calculation --------------------------------
+    if (j < run.get_inputs({"grid", "ny"}).asInt() - 1) {
+      // Reconstruct top/bottom states in y-direction
+      nL_y.e = asol[j-1][i].e + 0.5 * slope(asol[j-2][i].e, asol[j-1][i].e, asol[j][i].e);
+      nL_y.u[0] = asol[j-1][i].u[0] + 0.5 * slope(asol[j-2][i].u[0], asol[j-1][i].u[0], asol[j][i].u[0]);
+      nL_y.u[1] = asol[j-1][i].u[1] + 0.5 * slope(asol[j-2][i].u[1], asol[j-1][i].u[1], asol[j][i].u[1]);;
+      FillVischydroNode(nL_y, *run.eos);
 
-      // Y-direction flux calculation --------------------------------
-      if (j < run.get_inputs({"grid", "ny"}).asInt() - 1) {
-        // Reconstruct top/bottom states in y-direction
-        nL_y.e = asol[j-1][i].e + 0.5 * slope(asol[j-2][i].e, asol[j-1][i].e, asol[j][i].e);
-        nL_y.u[0] = asol[j-1][i].u[0] + 0.5 * slope(asol[j-2][i].u[0], asol[j-1][i].u[0], asol[j][i].u[0]);
-        nL_y.u[1] = asol[j-1][i].u[1] + 0.5 * slope(asol[j-2][i].u[1], asol[j-1][i].u[1], asol[j][i].u[1]);;
-        FillVischydroNode(nL_y, *run.eos);
+      nR_y.e = asol[j][i].e - 0.5 * slope(asol[j-1][i].e, asol[j][i].e, asol[j+1][i].e);
+      nR_y.u[0] = asol[j][i].u[0] - 0.5 * slope(asol[j-1][i].u[0], asol[j][i].u[0], asol[j+1][i].u[0]);
+      nR_y.u[1] = asol[j][i].u[1] - 0.5 * slope(asol[j-1][i].u[1], asol[j][i].u[1], asol[j+1][i].u[1]);
+      FillVischydroNode(nR_y, *run.eos);
+      std::cout << "nL_y.e = " << nL_y.e << " nR_y.e = " << nR_y.e << std::endl;
 
-        nR_y.e = asol[j][i].e - 0.5 * slope(asol[j-1][i].e, asol[j][i].e, asol[j+1][i].e);
-        nR_y.u[0] = asol[j][i].u[0] - 0.5 * slope(asol[j-1][i].u[0], asol[j][i].u[0], asol[j+1][i].u[0]);
-        nR_y.u[1] = asol[j][i].u[1] - 0.5 * slope(asol[j-1][i].u[1], asol[j][i].u[1], asol[j+1][i].u[1]);
-        FillVischydroNode(nR_y, *run.eos);
+      // Compute numerical y-flux
+      auto [ap_y, am_y] = propagationVelocity(nL_y.cs2, nL_y.u[1], nL_y.u0(), nR_y.cs2, nR_y.u[1], nR_y.u0());
+      std::array F_y = computeHLLFluxY(nL_y, nR_y, ap_y, am_y);
 
-        // Compute numerical y-flux
-        auto [ap_y, am_y] = propagationVelocity(nL_y.cs2, nL_y.u[1], nL_y.u0(), nR_y.cs2, nR_y.u[1], nR_y.u0());
-        std::array F_y = computeHLLFluxY(nL_y, nR_y, ap_y, am_y);
-
-        // Update RHS for y-direction
-        ag[j][i].E    -= F_y[0]/dy;
-        ag[j][i].M[0] -= F_y[1]/dy; 
-        ag[j][i].M[1] -= F_y[2]/dy;
-        ag[j-1][i].E    += F_y[0]/dy;
-        ag[j-1][i].M[0] += F_y[1]/dy;
-        ag[j-1][i].M[1] += F_y[2]/dy;
-      }
+      // Update RHS for y-direction
+      ag[j][i].E    -= F_y[0]/dy;
+      ag[j][i].M[0] -= F_y[1]/dy; 
+      ag[j][i].M[1] -= F_y[2]/dy;
+      ag[j-1][i].E    += F_y[0]/dy;
+      ag[j-1][i].M[0] += F_y[1]/dy;
+      ag[j-1][i].M[1] += F_y[2]/dy;
+      std::cout << "ag[" << j << "][" << i << "].E = " << ag[j][i].E 
+                << " ag[" << j-1 << "][" << i << "].E = " << ag[j-1][i].E << std::endl;
     }
   }
+}
 
   // Return the pointer to the local array back to the memory space
   DMDAVecRestoreArray(run.domain, run.local_solution, &asol);
@@ -261,7 +289,7 @@ Vischydro::Vischydro(Json::Value &config, const EOS *eosin) : configuration(conf
 
   const int stencil_width = 2;
   // 2d grid with ghosted boundary conditions
-  DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED,
+  DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC,
                DMDA_STENCIL_STAR, nx, ny, PETSC_DECIDE, PETSC_DECIDE,
                VischydroNode::NDOF, stencil_width, NULL, NULL, &domain);
   DMSetFromOptions(domain);

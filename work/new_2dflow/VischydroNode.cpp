@@ -66,6 +66,7 @@ double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n, const 
   double e = ein;
   double f = idealHydroCellIFunction(e, n, eos);
   double v = n.Mnrm() / (n.E + n.p);
+  std::cout << " f before = " << f << " e= " << e <<std::endl;
   int it = 0;
   const int maxit = 100;
   while (it < maxit) {
@@ -76,6 +77,9 @@ double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n, const 
     e -= f / df;
     f = idealHydroCellIFunction(e, n, eos);
     it++;
+    std::cout << "idealHydroCellSolve: it = " << it << " e = " << e
+              << " f = " << f << " df = " << df << std::endl;
+
   }   
   if (it == maxit) {
     std::cout << "idealHydroCell: Newton's method did not converge" << std::endl;
