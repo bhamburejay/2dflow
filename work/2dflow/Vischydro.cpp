@@ -81,6 +81,13 @@ std::array<double, 3> computeHLLFluxX(const VischydroNode& nL, const VischydroNo
   auto FR = nR.fluxX();
   auto qL = nL.charge();
   auto qR = nR.charge();
+  if(std::isnan(FL[0]) || std::isnan(FR[0]) || std::isnan(qL[0]) || std::isnan(qR[0])) {
+    std::cout << "computeHLLFluxX: ap = " << ap << ", am = " << am << std::endl;
+    std::cout << "FL = {" << FL[0] << ", " << FL[1] << ", " << FL[2] << "}" << std::endl;
+    std::cout << "FR = {" << FR[0] << ", " << FR[1] << ", " << FR[2] << "}" << std::endl;
+    std::cout << "qL = {" << qL[0] << ", " << qL[1] << ", " << qL[2] << "}" << std::endl;
+    std::cout << "qR = {" << qR[0] << ", " << qR[1] << ", " << qR[2] << "}" << std::endl;
+  }
 
   std::array<double, 3> F{};
   double denom = ap - am;
@@ -107,43 +114,6 @@ std::array<double, 3> computeHLLFluxY(const VischydroNode& nL, const VischydroNo
   return F;
 }
 
-// simpler RHS function for trial
-// PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
-//   const Vischydro &run = *(Vischydro *)ctx;
-//   auto eos = run.eos;
-
-//   // Copy the global solution to local solutions including the boundary values
-//   DMGlobalToLocalBegin(run.domain, U, INSERT_VALUES, run.local_solution);
-//   DMGlobalToLocalEnd(run.domain, U, INSERT_VALUES, run.local_solution);
-
-//   // Get current 2d grid i.e E, M
-//   VischydroNode **asol;       //asol: accessed soln
-//   DMDAVecGetArray(run.domain, run.local_solution, &asol);
-//   // 2d grid to store dE/dt and dM/dt
-//   VischydroNode **ag;
-//   DMDAVecGetArray(run.domain, G, &ag);
-
-//   // Loop over grid points and calculate RHS
-//   PetscInt xs, ys, xm, ym; 
-//   VecZeroEntries(G);
-//   DMDAGetCorners(run.domain, &xs, &ys, NULL, &xm, &ym, NULL);
-//   for (PetscInt j = ys; j < ys + ym; j++) {
-//     for (PetscInt i = xs; i < xs + xm; i++) {
-//       // Calculate RH
-//       double pr = eos->get_pressure(asol[j][i].e, asol[j][i].Mnrm());
-//       double e = asol[j][i].e;
-//       ag[j][i].E = -(E + pr) / t;
-//       ag[j][i].M[0] = 0.0;
-//       ag[j][i].M[1] = 0.0;
-//     }
-//   }
-
-//   // Return the pointer to the local array back to the memory space
-//   DMDAVecRestoreArray(run.domain, run.local_solution, &asol);
-//   DMDAVecRestoreArray(run.domain, G, &ag);
-//   return 0;
-// }
-
 // U is the current global solution vector, G is the global RHS vector  
 PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   Vischydro &run = *(Vischydro *)ctx;
@@ -154,13 +124,14 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
 
   // "convert" PETSc vectors to 2d c-style arrays for indexing
   VischydroNode **asol;
+  //std::array<VischydroNode*, 2> asol;
   DMDAVecGetArray(run.domain, run.local_solution, &asol);
   VischydroNode **ag;
   DMDAVecGetArray(run.domain, G, &ag);
 
   // Setup the local grids at each processor
   int ixs, ixm, iys, iym;
-  DMDAGetCorners(run.domain, &ixs, &iys, 0, &ixm, &iym, 0);
+  DMDAGetGhostCorners(run.domain, &ixs, &iys, 0, &ixm, &iym, 0);
 
   const double dx = run.dx, dy = run.dy;
   const double epsilon = 1e-8;
@@ -170,16 +141,21 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
 
   // Solve for the primitve variables in each cell
   for (int j = iys; j < iys + iym; j++){
-    for (int i = ixs-2; i < ixs + ixm +2; i++) {
+    for (int i = ixs; i < ixs + ixm; i++) {
       std::cout << "i= " << i << " j = " << j << std::endl;
+      std::cout << "upper iys + iym " << iys + iym << std::endl;
       std::cout << "E_{RHS} = " << asol[j][i].E << std::endl;
+      std::cout << "u[0] = " << asol[j][i].u[0] << std::endl;
+      std::cout << "n.M[0] = " << asol[j][i].M[0] << std::endl;
+      std::cout << "n.M[1] = " << asol[j][i].M[1] << std::endl;
       idealHydroCellSolve(asol[j][i].E, asol[j][i], *run.eos);
     }
   }
   
-  for (int j = iys -2; j < iys + iym + 2; j++){
+  for (int j = iys; j < iys + iym; j++){
     for (int i = ixs; i < ixs + ixm; i++) {
       std::cout << "i= " << i << " j = " << j << std::endl;
+      std::cout << "lower iys + iym " << iys + iym << std::endl;
       std::cout << "E_{RHS} = " << asol[j][i].E << std::endl;
       idealHydroCellSolve(asol[j][i].E, asol[j][i], *run.eos);
     }
@@ -192,19 +168,23 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   // since we are calculating the flux across the cell interfaces, if there are
   // N cells, we need to calculate the flux at N+1 interfaces, including the boundaries.
   for (int j = iys; j < iys + iym; j++) {
-    for (int i = ixs -1; i < ixs + ixm ; i++) {
+    for (int i = ixs; i < ixs + ixm ; i++) {
       std::cout << "here i = " << i << " j = " << j << std::endl;
       // X-direction flux calculation --------------------------------
       // Reconstruct left/right states in x-direction
-      nL_x.e = asol[j][i].e + 0.5 * slope(asol[j][i-1].e, asol[j][i].e, asol[j][i+1].e);
-      nL_x.u[0] = asol[j][i].u[0] + 0.5 * slope(asol[j][i-1].u[0], asol[j][i].u[0], asol[j][i+1].u[0]);
-      nL_x.u[1] = asol[j][i].u[1] + 0.5 * slope(asol[j][i-1].u[1], asol[j][i].u[1], asol[j][i+1].u[1]);
-      FillVischydroNode(nL_x, *run.eos);
+      if(i > 0 and i < ixs + ixm - 1) {
+        nL_x.e = asol[j][i].e + 0.5 * slope(asol[j][i-1].e, asol[j][i].e, asol[j][i+1].e);
+        nL_x.u[0] = asol[j][i].u[0] + 0.5 * slope(asol[j][i-1].u[0], asol[j][i].u[0], asol[j][i+1].u[0]);
+        nL_x.u[1] = asol[j][i].u[1] + 0.5 * slope(asol[j][i-1].u[1], asol[j][i].u[1], asol[j][i+1].u[1]);
+        FillVischydroNode(nL_x, *run.eos);
+      }
 
-      nR_x.e = asol[j][i+1].e - 0.5 * slope(asol[j][i].e, asol[j][i+1].e, asol[j][i+2].e);
-      nR_x.u[0] = asol[j][i+1].u[0] - 0.5 * slope(asol[j][i].u[0], asol[j][i+1].u[0], asol[j][i+2].u[0]);
-      nR_x.u[1] = asol[j][i+1].u[1] - 0.5 * slope(asol[j][i].u[1], asol[j][i+1].u[1], asol[j][i+2].u[1]);
-      FillVischydroNode(nR_x, *run.eos);
+      if(i < ixs+ixm -2) {
+        nR_x.e = asol[j][i+1].e - 0.5 * slope(asol[j][i].e, asol[j][i+1].e, asol[j][i+2].e);
+        nR_x.u[0] = asol[j][i+1].u[0] - 0.5 * slope(asol[j][i].u[0], asol[j][i+1].u[0], asol[j][i+2].u[0]);
+        nR_x.u[1] = asol[j][i+1].u[1] - 0.5 * slope(asol[j][i].u[1], asol[j][i+1].u[1], asol[j][i+2].u[1]);
+        FillVischydroNode(nR_x, *run.eos);
+      }
       std::cout << "nL_x.e = " << nL_x.e << " nR_x.e = " << nR_x.e << std::endl;
       
       // Compute numerical x-flux
@@ -233,34 +213,39 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
       std::cout << "ag[" << j << "][" << i << "].E = " << ag[j][i].E 
                 << " ag[" << j << "][" << i-1 << "].E = " << ag[j][i-1].E << std::endl;
     
-    // Y-direction flux calculation --------------------------------
-    if (j < run.get_inputs({"grid", "ny"}).asInt() - 1) {
-      // Reconstruct top/bottom states in y-direction
-      nL_y.e = asol[j-1][i].e + 0.5 * slope(asol[j-2][i].e, asol[j-1][i].e, asol[j][i].e);
-      nL_y.u[0] = asol[j-1][i].u[0] + 0.5 * slope(asol[j-2][i].u[0], asol[j-1][i].u[0], asol[j][i].u[0]);
-      nL_y.u[1] = asol[j-1][i].u[1] + 0.5 * slope(asol[j-2][i].u[1], asol[j-1][i].u[1], asol[j][i].u[1]);;
-      FillVischydroNode(nL_y, *run.eos);
+      // Y-direction flux calculation --------------------------------
+      if (j < run.get_inputs({"grid", "ny"}).asInt() - 1) {
+        // Reconstruct top/bottom states in y-direction
+        nL_y.e = asol[j-1][i].e + 0.5 * slope(asol[j-2][i].e, asol[j-1][i].e, asol[j][i].e);
+        nL_y.u[0] = asol[j-1][i].u[0] + 0.5 * slope(asol[j-2][i].u[0], asol[j-1][i].u[0], asol[j][i].u[0]);
+        nL_y.u[1] = asol[j-1][i].u[1] + 0.5 * slope(asol[j-2][i].u[1], asol[j-1][i].u[1], asol[j][i].u[1]);;
+        FillVischydroNode(nL_y, *run.eos);
 
-      nR_y.e = asol[j][i].e - 0.5 * slope(asol[j-1][i].e, asol[j][i].e, asol[j+1][i].e);
-      nR_y.u[0] = asol[j][i].u[0] - 0.5 * slope(asol[j-1][i].u[0], asol[j][i].u[0], asol[j+1][i].u[0]);
-      nR_y.u[1] = asol[j][i].u[1] - 0.5 * slope(asol[j-1][i].u[1], asol[j][i].u[1], asol[j+1][i].u[1]);
-      FillVischydroNode(nR_y, *run.eos);
-      std::cout << "nL_y.e = " << nL_y.e << " nR_y.e = " << nR_y.e << std::endl;
+        nR_y.e = asol[j][i].e - 0.5 * slope(asol[j-1][i].e, asol[j][i].e, asol[j+1][i].e);
+        nR_y.u[0] = asol[j][i].u[0] - 0.5 * slope(asol[j-1][i].u[0], asol[j][i].u[0], asol[j+1][i].u[0]);
+        nR_y.u[1] = asol[j][i].u[1] - 0.5 * slope(asol[j-1][i].u[1], asol[j][i].u[1], asol[j+1][i].u[1]);
+        FillVischydroNode(nR_y, *run.eos);
+        std::cout << "nL_y.e = " << nL_y.e << " nR_y.e = " << nR_y.e << std::endl;
 
-      // Compute numerical y-flux
-      auto [ap_y, am_y] = propagationVelocity(nL_y.cs2, nL_y.u[1], nL_y.u0(), nR_y.cs2, nR_y.u[1], nR_y.u0());
-      std::array F_y = computeHLLFluxY(nL_y, nR_y, ap_y, am_y);
+        // Compute numerical y-flux
+        auto [ap_y, am_y] = propagationVelocity(nL_y.cs2, nL_y.u[1], nL_y.u0(), nR_y.cs2, nR_y.u[1], nR_y.u0());
+        std::array F_y = computeHLLFluxY(nL_y, nR_y, ap_y, am_y);
 
-      // Update RHS for y-direction
-      ag[j][i].E    -= F_y[0]/dy;
-      ag[j][i].M[0] -= F_y[1]/dy; 
-      ag[j][i].M[1] -= F_y[2]/dy;
-      ag[j-1][i].E    += F_y[0]/dy;
-      ag[j-1][i].M[0] += F_y[1]/dy;
-      ag[j-1][i].M[1] += F_y[2]/dy;
-      std::cout << "ag[" << j << "][" << i << "].E = " << ag[j][i].E 
-                << " ag[" << j-1 << "][" << i << "].E = " << ag[j-1][i].E << std::endl;
-    }
+        // Update RHS for y-direction
+        ag[j][i].E    -= F_y[0]/dy;
+        ag[j][i].M[0] -= F_y[1]/dy; 
+        ag[j][i].M[1] -= F_y[2]/dy;
+        if(j == 0) continue;
+        ag[j-1][i].E    += F_y[0]/dy;
+        ag[j-1][i].M[0] += F_y[1]/dy;
+        ag[j-1][i].M[1] += F_y[2]/dy;
+        std::cout << "ag[" << j << "][" << i << "].E = " << ag[j][i].E 
+                  << " ag[" << j-1 << "][" << i << "].E = " << ag[j-1][i].E << std::endl;
+      }
+      if(std::isnan(ag[j-1][i].M[0]) || std::isnan(ag[j][i].M[0])){
+        int i = 0;
+        i++;
+      }
   }
 }
 
@@ -269,6 +254,160 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   DMDAVecRestoreArray(run.domain, G, &ag);
 
   return 0;
+}
+
+
+// Helper routine kappa taking hydrocell and etabys as argument and returns Kappa
+// for which we need comoving frame h and scalar projection tensor P
+// and products like Ph, hPh and <PhPh> 
+  std::array<std::array<std::array<std::array<double, VischydroNode::dim>, 
+  VischydroNode::dim>, VischydroNode::dim>, VischydroNode::dim> 
+  kappa(const VischydroNode &nd, const double &etabys) {
+  
+  double T = 1. / nd.get_beta();
+  double s = nd.s(); 
+  double speed = nd.get_speed();
+  double cs2 = nd.get_cs2();
+  double u0 = nd.u0();
+  std::array<double, VischydroNode::dim> v = nd.velocity();
+
+  // comoving frame h
+  std::array<std::array<double, VischydroNode::dim>, VischydroNode::dim> h;
+  for (int i = 0; i < VischydroNode::dim; i++) {
+    for (int j = 0; j < VischydroNode::dim; j++) {
+      h[i][j] =  (i == j) ? 1.0 : 0.0 - v[i] * v[j]; 
+    }
+  }
+  
+  // scalar projection tensor P
+  std::array<std::array<double, VischydroNode::dim>, VischydroNode::dim> P;
+  for (int i = 0; i < VischydroNode::dim; i++) {
+    for (int j = 0; j < VischydroNode::dim; j++) {
+      P[i][j] = -cs2*nd.u[i]*nd.u[j] + (1.0/nd.dim)*((i == j) ? 1.0 : 0.0 - nd.u[i] * nd.u[j]);
+    }
+  }
+
+  // <Ph> calculation
+  double Ph = 1 - cs2 * pow(speed, 2);
+  
+  // hPh calculation
+  std::array<std::array<double, VischydroNode::dim>, VischydroNode::dim> hPh;
+  for (int i = 0; i < VischydroNode::dim; i++) {
+    for (int j = 0; j < VischydroNode::dim; j++) {
+      hPh[i][j] = (-cs2*v[i]*v[j])/u0 + h[i][j]/nd.dim;
+    }
+  }
+
+  // <PhPh> calculation
+  double PhPh = (nd.dim-1)/nd.dim * pow(cs2*pow(speed,2),2) + 1/nd.dim * pow(1.0 - cs2 * pow(speed, 2),2);
+
+  // Kappa calculation
+  std::array<std::array<std::array<std::array<double, VischydroNode::dim>, VischydroNode::dim>, VischydroNode::dim>, VischydroNode::dim> kappa{};
+  for (int i = 0; i < VischydroNode::dim; i++) {
+    for (int j = 0; j < VischydroNode::dim; j++) {
+      for (int m = 0; m < VischydroNode::dim; m++) {
+        for (int n = 0; n < VischydroNode::dim; n++) {
+          kappa[i][j][m][n] = 2 * etabys * (h[i][m] * h[j][n] + h[j][m] * h[i][n]
+                                          - (h[i][j]*hPh[m][n] - h[m][n]*hPh[i][j])/Ph
+                                          +(PhPh*h[i][j] * h[m][n])/pow(Ph,2));
+        }
+      }
+    }
+  }
+  return kappa;
+}
+
+// Jacobian
+PetscErrorCode LHSIJacobian2D(TS ts, PetscReal t, Vec u, Vec udot, PetscReal shift, Mat J, Mat P, void *context) {
+    auto run = (Vischydro *)context;
+
+    DMGlobalToLocalBegin(run->domain, u, INSERT_VALUES, run->local_solution);
+    DMGlobalToLocalEnd(run->domain, u, INSERT_VALUES, run->local_solution);
+
+    VischydroNode **au;
+    DMDAVecGetArray(run->domain, run->local_solution, &au);
+
+    VischydroNode **au_last;
+    DMDAVecGetArray(run->domain, run->solution_last, &au_last);
+
+    double etabys = run->get_inputs({"eta_over_s"}).asDouble();
+    double dx = run->dx;
+    double dy = run->dy;
+
+    PetscCall(MatZeroEntries(P));
+
+    int ixs, ixm, jxs, jxm;
+    DMDAGetCorners(run->domain, &ixs, &jxs, 0, &ixm, &jxm, 0);
+
+    // Update cell states using idealHydroCellSolve
+    for (int j = jxs - 1; j < jxs + jxm + 1; j++) {
+        for (int i = ixs - 1; i < ixs + ixm + 1; i++) {
+            idealHydroCellSolve(au_last[j][i].e, au[j][i], *run->eos);
+            au_last[j][i] = au[j][i];
+        }
+    }
+
+    for (int j = jxs; j < jxs + jxm; j++) {
+        for (int i = ixs; i < ixs + ixm; i++) {
+            auto kappa_tensor = kappa(au[j][i], etabys);
+
+            for (int c = 0; c < VischydroNode::NDOF; c++) {
+                MatStencil row{};
+                row.i = i;
+                row.j = j;
+                row.c = c;
+
+                PetscInt nc = 0;
+                MatStencil column[9]{};
+                PetscScalar value[9]{};
+
+                // Compute contributions from kappa tensor
+                for (int m = 0; m < VischydroNode::dim; m++) {
+                    for (int n = 0; n < VischydroNode::dim; n++) {
+                        double kappa_contrib = kappa_tensor[c][c][m][n];
+
+                        if (m == 0) {
+                            column[nc].i = i + 1;
+                            column[nc].j = j;
+                            value[nc++] = kappa_contrib / (dx * dx);
+
+                            column[nc].i = i - 1;
+                            column[nc].j = j;
+                            value[nc++] = kappa_contrib / (dx * dx);
+                        }
+
+                        if (n == 1) {
+                            column[nc].i = i;
+                            column[nc].j = j + 1;
+                            value[nc++] = kappa_contrib / (dy * dy);
+
+                            column[nc].i = i;
+                            column[nc].j = j - 1;
+                            value[nc++] = kappa_contrib / (dy * dy);
+                        }
+                    }
+                }
+
+                column[nc].i = i;
+                column[nc].j = j;
+                value[nc++] = shift;
+
+                MatSetValuesStencil(P, 1, &row, nc, column, value, INSERT_VALUES);
+            }
+        }
+    }
+
+    DMDAVecRestoreArray(run->domain, run->local_solution, &au);
+    DMDAVecRestoreArray(run->domain, run->solution_last, &au_last);
+
+    MatAssemblyBegin(P, MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(P, MAT_FINAL_ASSEMBLY);
+    if (J != P) {
+        MatAssemblyBegin(J, MAT_FINAL_ASSEMBLY);
+        MatAssemblyEnd(J, MAT_FINAL_ASSEMBLY);
+    }
+
+    return 0;
 }
 
 // contructor
@@ -289,13 +428,14 @@ Vischydro::Vischydro(Json::Value &config, const EOS *eosin) : configuration(conf
 
   const int stencil_width = 2;
   // 2d grid with ghosted boundary conditions
-  DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC,
+  DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE,
                DMDA_STENCIL_STAR, nx, ny, PETSC_DECIDE, PETSC_DECIDE,
                VischydroNode::NDOF, stencil_width, NULL, NULL, &domain);
   DMSetFromOptions(domain);
   DMSetUp(domain);
   DMCreateGlobalVector(domain, &solution);
   DMCreateLocalVector(domain, &local_solution);
+  DMCreateLocalVector(domain, &solution_last); // Initialize solution_last
 
   // Set coordinates
   DMDASetUniformCoordinates(domain, xmin, xmax, ymin, ymax, 0.0, 0.0);

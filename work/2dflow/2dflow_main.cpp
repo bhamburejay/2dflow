@@ -23,7 +23,7 @@ void set_gaussian_initialconditions(Vischydro &hy) {
 
   // Get local grid bounds
   PetscInt xs, ys, xm, ym;
-  DMDAGetCorners(hy.domain, &xs, &ys, NULL, &xm, &ym, NULL);
+  DMDAGetGhostCorners(hy.domain, &xs, &ys, NULL, &xm, &ym, NULL);
 
   // Initialize owned cells (excluding ghost cells)
   for (PetscInt j = ys; j < ys + ym; j++) {
@@ -34,8 +34,11 @@ void set_gaussian_initialconditions(Vischydro &hy) {
       n.print("Before initialization");
       // Set initial conditions
       n.E = E0* exp(-(x*x + y*y) / (2*sigma*sigma));
-      n.u[0] = 1.6;
-      //std::cout << "ux = " << n.u[0] << std::endl;
+      n.u[0] = 2.0;
+      n.u[1] = 0.0;
+      n.M[0] = (n.e + n.p) * n.u0() * n.u[0];
+      n.M[1] = (n.e + n.p) * n.u0() * n.u[1];
+      // std::cout << "ux = " << n.u[0] << std::endl;
       // Solve for primitive variables
       double ein = n.E;
       idealHydroCellSolve(ein, n, eos);
@@ -146,40 +149,40 @@ void RunCode() {
   vischydro->save(run_name + "_initial.h5");
 
   // ====== CFL TIME STEP CONTROL ====== //
-  // DM da = vischydro->domain;
-  // Vec solution = vischydro->solution;
-  // VischydroNode **nodes;
-  // DMDAVecGetArray(da, solution, &nodes);
+  DM da = vischydro->domain;
+  Vec solution = vischydro->solution;
+  VischydroNode **nodes;
+  DMDAVecGetArray(da, solution, &nodes);
 
-  // double max_vel = 0.0;
-  // PetscInt xs, ys, xm, ym;
-  // DMDAGetCorners(da, &xs, &ys, NULL, &xm, &ym, NULL);
+  double max_vel = 0.0;
+  PetscInt xs, ys, xm, ym;
+  DMDAGetCorners(da, &xs, &ys, NULL, &xm, &ym, NULL);
 
-  // for (PetscInt j = ys; j < ys + ym; j++) {
-  //     for (PetscInt i = xs; i < xs + xm; i++) {
-  //         const auto& node = nodes[j][i];
-  //         double vx = node.vx();
-  //         double vy = node.vy();
-  //         max_vel = std::max({max_vel, std::abs(vx), std::abs(vy)});
-  //     }
-  // }
-  // DMDAVecRestoreArray(da, solution, &nodes);
+  for (PetscInt j = ys; j < ys + ym; j++) {
+      for (PetscInt i = xs; i < xs + xm; i++) {
+          const auto& node = nodes[j][i];
+          double vx = node.vx();
+          double vy = node.vy();
+          max_vel = std::max({max_vel, std::abs(vx), std::abs(vy)});
+      }
+  }
+  DMDAVecRestoreArray(da, solution, &nodes);
 
-  // double global_max_vel;
-  // MPI_Allreduce(&max_vel, &global_max_vel, 1, MPI_DOUBLE, MPI_MAX, PETSC_COMM_WORLD);
+  double global_max_vel;
+  MPI_Allreduce(&max_vel, &global_max_vel, 1, MPI_DOUBLE, MPI_MAX, PETSC_COMM_WORLD);
 
-  // double dt_cfl;
-  // if (global_max_vel < 1e-12) {
-  //     dt_cfl = vischydro->get_inputs({"time_settings", "dt"}).asDouble();
-  //     PetscPrintf(PETSC_COMM_WORLD, 
-  //         "WARNING: Zero initial velocity. Using dt=%.3e from input\n", dt_cfl
-  //     );
-  // } else {
-  //     dt_cfl = 0.4 * std::min(vischydro->dx, vischydro->dy) / (global_max_vel + 1e-12);
-  // }
+  double dt_cfl;
+  if (global_max_vel < 1e-12) {
+      dt_cfl = vischydro->get_inputs({"time_settings", "dt"}).asDouble();
+      PetscPrintf(PETSC_COMM_WORLD, 
+          "WARNING: Zero initial velocity. Using dt=%.3e from input\n", dt_cfl
+      );
+  } else {
+      dt_cfl = 0.4 * std::min(vischydro->dx, vischydro->dy) / (global_max_vel + 1e-12);
+  }
 
-  // TSSetTimeStep(vischydro->stepper, dt_cfl);
-  // TSSetMaxSteps(vischydro->stepper, 1000);
+  TSSetTimeStep(vischydro->stepper, dt_cfl);
+  TSSetMaxSteps(vischydro->stepper, 1000);
   // ====== END CFL CODE ====== //
 
 
