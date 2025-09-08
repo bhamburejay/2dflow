@@ -84,3 +84,20 @@ mpicxx -o Vischydro.exe `pkg-config --cflags petsc` Vischydro.cpp jsoncpp.cpp  `
 ```
 mpicxx -o 2dflow_main.exe `pkg-config --cflags petsc` 2dflow_main.cpp VischydroNode.cpp Vischydro.cpp `pkg-config --libs petsc` -ljsoncpp
 ```
+```
+mpicxx -g -O0 -o 2dflow_main.exe `pkg-config --cflags petsc` 2dflow_main.cpp VischydroNode.cpp Vischydro.cpp `pkg-config --libs petsc` -ljsoncpp
+```
+
+
+
+# compile 1dIdealFlow code
+```
+mpicxx -o idealFlow2d idealFlow2d.cpp `pkg-config --cflags petsc` `pkg-config --libs petsc`
+```
+
+# run 1dIdealFlow code
+```
+mpiexec -n 1 ./idealFlow2d
+
+python idealPlot.py
+```

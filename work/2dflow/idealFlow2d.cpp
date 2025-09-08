@@ -202,8 +202,8 @@ int main(int argc, char **argv) {
     TSSetRHSFunction(ts, NULL, EulerRHSFunction, &eos);
 
     TSSetSolution(ts, U);
-    TSSetMaxTime(ts, 10.0);
-    TSSetTimeStep(ts, 0.01);
+    TSSetMaxTime(ts, 1000.0);
+    TSSetTimeStep(ts, 0.1);
 
     // Solve and write final output
     TSSolve(ts, U);
