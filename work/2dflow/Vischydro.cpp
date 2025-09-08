@@ -428,7 +428,7 @@ Vischydro::Vischydro(Json::Value &config, const EOS *eosin) : configuration(conf
 
   const int stencil_width = 2;
   // 2d grid with ghosted boundary conditions
-  DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_NONE, DM_BOUNDARY_NONE,
+  DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC,
                DMDA_STENCIL_STAR, nx, ny, PETSC_DECIDE, PETSC_DECIDE,
                VischydroNode::NDOF, stencil_width, NULL, NULL, &domain);
   DMSetFromOptions(domain);
