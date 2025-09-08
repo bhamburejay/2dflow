@@ -182,7 +182,7 @@ void RunCode() {
   }
 
   TSSetTimeStep(vischydro->stepper, dt_cfl);
-  TSSetMaxSteps(vischydro->stepper, 1000);
+  TSSetMaxSteps(vischydro->stepper, 10);
   // ====== END CFL CODE ====== //
 
 
