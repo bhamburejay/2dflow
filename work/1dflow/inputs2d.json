@@ -1,0 +1,13 @@
+{
+  "NX": 64,
+  "NY": 64,
+  "xmin": -32.0,
+  "xmax": 32.0,
+  "ymin": -32.0,
+  "ymax": 32.0,
+  "initial_time": 0.0,
+  "final_time": 10.0,
+  "cfl_max": 0.1,
+  "steps_per_print": 10,
+  "iofilename": "idealOutput2.h5"
+}
