@@ -87,17 +87,11 @@ mpicxx -o 2dflow_main.exe `pkg-config --cflags petsc` 2dflow_main.cpp VischydroN
 ```
 mpicxx -g -O0 -o 2dflow_main.exe `pkg-config --cflags petsc` 2dflow_main.cpp VischydroNode.cpp Vischydro.cpp `pkg-config --libs petsc` -ljsoncpp
 ```
-
-
-
-# compile 1dIdealFlow code
+# compile and run 1D idealFlow code (NOTE: While plotting via python files change the Field, E, M, ux etc)
 ```
-mpicxx -o idealFlow2d idealFlow2d.cpp `pkg-config --cflags petsc` `pkg-config --libs petsc`
-```
+mpicxx -o idealFlow idealFlow.cpp `pkg-config --cflags petsc` `pkg-config --libs petsc` -ljsoncpp
 
-# run 1dIdealFlow code
-```
-mpiexec -n 1 ./idealFlow2d
+mpiexec -n 1 ./idealFlow
 
-python idealPlot.py
+python idealPlot.py idealOutput1.h5 --field E
 ```
