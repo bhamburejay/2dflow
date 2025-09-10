@@ -206,7 +206,6 @@ std::tuple<double, double> propagationVelocity(const double &cs2L, const double
 }
 
 // A class that determines the slope of of a function using a slope limiter and three points. The usage is as follows:  
-//
 // limitter slope(limitter::kCenteredMinMod);
 // m = slope(qm, q0, qp);   // m is the slope based on the three points qm, q0, and qp.
 class limitter {
@@ -266,7 +265,7 @@ public:
   Vischydro (const Json::Value &in, const EOS &eosin) : inputs(in), eos(eosin) {
     const int stencil_width = 2;
     DMDACreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, get_inputs("NX").asInt(),
-        VischydroNode::NDOF, stencil_width, 0, &domain); 
+                VischydroNode::NDOF, stencil_width, 0, &domain); 
     DMSetFromOptions(domain);
     DMSetUp(domain);
 
@@ -329,9 +328,13 @@ public:
 
     // Initialize solution vector in C++ with Gaussian energy profile
     VischydroNode *asol;
+    
+    // Note: In PETSC at a processor ixs is starting and ixm is total number of grid points
+    // hence the total grid points are from ixs to ixs+ixm-1 on a processor
     int ixs, ixm;
     DMDAGetCorners(domain, &ixs, 0, 0, &ixm, 0, 0);
     DMDAVecGetArray(domain, solution, &asol);
+    
     // Parameters for Gaussian
     double amplitude = 5.0; // peak value
     double sigma = 10.0;    // width
@@ -359,6 +362,7 @@ public:
     VecDestroy(&solution_last);
     DMDestroy(&domain);
   }
+  
   Json::Value get_inputs(const std::string &key) const {
     if (!inputs.isMember(key)) {
       std::cerr << "Key " << key << " not found in inputs" << std::endl;
@@ -399,13 +403,14 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   const double epsilon = 1.e-8;
   limitter slope(limitter::kCenteredMinMod);
 
-  // Solve for the internal state
+  // Update value of energy density at each grid point
   for (int i = ixs-2; i < ixs + ixm +2; i++) {
     idealHydroCellSolve(asol_last[i].e, asol[i], run.eos);
     asol_last[i] = asol[i];
   }
 
   for (int i = ixs; i < ixs + ixm + 1; i++) {
+    // temporary nodes for left and right states
     VischydroNode nL{};
     VischydroNode nR{};
     
@@ -473,9 +478,13 @@ PetscErrorCode PostStepInversion(TS ts) {
   PetscCall(DMDAVecGetArray(run.domain, run.solution, &au));
   VischydroNode *au_last;
   PetscCall(DMDAVecGetArray(run.domain, run.solution_last, &au_last));
+  
+  // Note: In PETSC at a processor ixs is starting and ixm is total number of grid points
+  // hence the total grid points are from ixs to ixs+ixm-1 on a processor
   int ixs, ixm;
   DMDAGetCorners(run.domain, &ixs, 0, 0, &ixm, 0, 0);
   
+  // grid points go from ixs to ixs+ixm-1 hence the following range on for loop
   for (int i = ixs; i < ixs + ixm; i++) {
     idealHydroCellSolve(au_last[i].e, au[i], run.eos);
     au_last[i] = au[i];
