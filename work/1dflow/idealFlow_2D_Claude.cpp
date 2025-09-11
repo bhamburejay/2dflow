@@ -32,21 +32,27 @@ class EOS {
 };
 
 struct VischydroNode {
-    static const int NDOF = 7;
-    static const int Ncharge = 2;
-    PetscScalar E;
-    PetscScalar M;
-    PetscScalar e;
-    PetscScalar ux;
-    PetscScalar p;
-    PetscScalar beta;
-    PetscScalar cs2;
+
+    double E;   // Energy density
+    double Mx;  // x-momentum density
+    double My;  // y-momentum density (NEW)
+    double e;   // Rest frame energy density
+    double ux;  // x-velocity
+    double uy;  // y-velocity (NEW)
+    double p;   // Pressure
+    double beta; // Inverse temperature
+    double cs2; // Speed of sound squared
+
+    static const int NDOF = 9;  // Now 3 conserved variables: E, Mx, My
+    static const int Ncharge = 3; // E, Mx, My
 
     void zero() {
-      E = 0.0;
-      M = 0.0;
+      E  = 0.0;
+      Mx = 0.0;
+      My = 0.0;
       e = 0.0;
       ux = 0.0;
+      uy = 0.0;
       p = 0.0;
       beta = 0.0;
       cs2 = 0.0;
@@ -264,8 +270,13 @@ public:
 
   Vischydro (const Json::Value &in, const EOS &eosin) : inputs(in), eos(eosin) {
     const int stencil_width = 2;
-    DMDACreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, get_inputs("NX").asInt(),
-                VischydroNode::NDOF, stencil_width, 0, &domain); 
+    DMDACreate2d(PETSC_COMM_WORLD, 
+                DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC,  // periodic in both directions
+                DMDA_STENCIL_STAR,
+                get_inputs("NX").asInt(), get_inputs("NY").asInt(),
+                PETSC_DECIDE, PETSC_DECIDE,  // let PETSc decide processor layout
+                VischydroNode::NDOF, stencil_width, 
+                NULL, NULL, &domain);
     DMSetFromOptions(domain);
     DMSetUp(domain);
 
@@ -277,9 +288,15 @@ public:
     xmin = get_inputs("xmin").asDouble();
     xmax = get_inputs("xmax").asDouble();
     dx = (xmax - xmin) / (double)(get_inputs("NX").asInt() - 1);
+    double ymin = get_inputs("ymin").asDouble();
+    double ymax = get_inputs("ymax").asDouble();
+    double dy = (ymax - ymin) / (double)(get_inputs("NY").asInt() - 1);
     std::cout << "xmin: " << xmin << std::endl;
     std::cout << "xmax: " << xmax << std::endl;
     std::cout << "dx: " << dx << std::endl;
+    std::cout << "ymin: " << ymin << std::endl;
+    std::cout << "ymax: " << ymax << std::endl;
+    std::cout << "dy: " << dy << std::endl;
 
     // Construct the time grid
     double initial_time = get_inputs("initial_time").asDouble();
@@ -331,8 +348,8 @@ public:
     
     // Note: In PETSC at a processor ixs is starting and ixm is total number of grid points
     // hence the total grid points are from ixs to ixs+ixm-1 on a processor
-    int ixs, ixm;
-    DMDAGetCorners(domain, &ixs, 0, 0, &ixm, 0, 0);
+    int ixs, iys, ixm, iym;
+    DMDAGetCorners(domain, &ixs, &iys, 0, &ixm, &iym, 0);
     DMDAVecGetArray(domain, solution, &asol);
     
     // Parameters for Gaussian
@@ -340,11 +357,14 @@ public:
     double sigma = 10.0;    // width
     double xmid = 0.5 * (xmin + xmax);
     double ux0 = 0.0; // initial velocity
-    for (int i = ixs; i < ixs + ixm; i++) {
-      double x = xmin + i * dx;
-      asol[i].e = amplitude * std::exp(- (x - xmid) * (x - xmid) / (2.0 * sigma * sigma));
-      asol[i].ux = ux0;
-      FillVischydroNode(asol[i], eos);
+    for (int j = iys; j < iys + iym; i++) {
+      for (int i = ixs; i < ixs + ixm; i++) {
+        double x = xmin + i * dx;
+        double y = ymin + j * dy;
+        asol[i].e = amplitude * std::exp(- (x - xmid) * (x - xmid) / (2.0 * sigma * sigma));
+        asol[i].ux = ux0;
+        FillVischydroNode(asol[i], eos);
+      }
     }
     // Fill in the boundary cells and the local last solution based on the initial conditions.
     DMGlobalToLocal(domain, solution, INSERT_VALUES, solution_last);
@@ -398,7 +418,7 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   VischydroNode *ag;
   PetscCall(DMDAVecGetArray(run.domain, G, &ag));
   int ixs, ixm ;
-  PetscCall(DMDAGetCorners(run.domain, &ixs, 0, 0, &ixm, 0, 0));
+  PetscCall(DMDAGetCorners(run.domain, &ixs, &iys, 0, &ixm, &iym, 0));
 
   const double epsilon = 1.e-8;
   limitter slope(limitter::kCenteredMinMod);
@@ -481,8 +501,8 @@ PetscErrorCode PostStepInversion(TS ts) {
   
   // Note: In PETSC at a processor ixs is starting and ixm is total number of grid points
   // hence the total grid points are from ixs to ixs+ixm-1 on a processor
-  int ixs, ixm;
-  DMDAGetCorners(run.domain, &ixs, 0, 0, &ixm, 0, 0);
+  int ixs, ixm, iys, iym;
+  DMDAGetCorners(run.domain, &ixs, &iys, 0, &ixm, &iym, 0);
   
   // grid points go from ixs to ixs+ixm-1 hence the following range on for loop
   for (int i = ixs; i < ixs + ixm; i++) {
