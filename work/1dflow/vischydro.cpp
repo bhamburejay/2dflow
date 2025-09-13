@@ -583,18 +583,18 @@ double derivative_dbxde(const VischydroNode &nd) {
   return -nd.vx() * (1  + 2 * cs2  + cs2 * v2) /(1 -v2 * cs2) * u0 * nd.get_beta() /nd.w();
 }
 
-// // Test the sigmaxxxx function
-// void test_sigmaxxxx() {
-//   EOS eos(0);
-//   VischydroNode nd;
-//   nd.e = 1.0;
-//   double v = 0.99;
-//   nd.ux = v/sqrt(1. - v*v);
-//   FillVischydroNode(nd, eos); 
-//   double etabys = 0.1;
-//   double sigma = sigmaxxxx(nd, etabys);
-//   std::cout << sigma << std::endl;
-// }
+// Test the sigmaxxxx function
+void test_sigmaxxxx() {
+  EOS eos(0);
+  VischydroNode nd;
+  nd.e = 1.0;
+  double v = 0.99;
+  nd.ux = v/sqrt(1. - v*v);
+  FillVischydroNode(nd, eos); 
+  double etabys = 0.1;
+  double sigma = sigmaxxxx(nd, etabys);
+  std::cout << sigma << std::endl;
+}
 
 // Test derivative_dbxdm
 void test_derivative_dbxdm() {
