@@ -10,7 +10,6 @@
 #include "petscts.h"
 #include <petscviewerhdf5.h>
 
-// Equation of state for calculating thermodynamic variables like pressure, temperature, speed of sound, etc.
 class EOS {
  private:
      double Nc;
@@ -32,17 +31,28 @@ class EOS {
     double get_pressure   (double e, double rhob) const {return(1./3.*e);}
 };
 
-// A struct that holds the variables for a single grid point.
 struct VischydroNode {
-    static const int NDOF = 7;
-    static const int Ncharge = 2;
-    PetscScalar E, M, e, ux, p, beta, cs2;
+
+    double E;   // Energy density
+    double Mx;  // x-momentum density
+    double My;  // y-momentum density (NEW)
+    double e;   // Rest frame energy density
+    double ux;  // x-velocity
+    double uy;  // y-velocity (NEW)
+    double p;   // Pressure
+    double beta; // Inverse temperature
+    double cs2; // Speed of sound squared
+
+    static const int NDOF = 9;  // Now 3 conserved variables: E, Mx, My
+    static const int Ncharge = 3; // E, Mx, My
 
     void zero() {
-      E = 0.0;
-      M = 0.0;
+      E  = 0.0;
+      Mx = 0.0;
+      My = 0.0;
       e = 0.0;
       ux = 0.0;
+      uy = 0.0;
       p = 0.0;
       beta = 0.0;
       cs2 = 0.0;
@@ -182,7 +192,7 @@ std::tuple<double, double> idealPropagationVelocity(const double &cs2, const dou
 std::tuple<double, double> propagationVelocity(const double &cs2L, const double
     &uxL, const double &u0L, const double &cs2R, const double &uxR, const
     double &u0R, bool usespeedoflight=false) {
-    double ap, am;
+  double ap, am;
   if (usespeedoflight) {
     ap = 1.01;
     am = -1.01;
@@ -231,11 +241,11 @@ public:
   limitter(const int &imethod = limitter::kCenteredMinMod) : method(imethod){};
 };
 
-struct VischydroNode;
+struct VischydroNode ;
 
 PetscErrorCode PostStepInversion(TS ts) ;
 PetscErrorCode VischydroMonitor(TS ts, PetscInt step, PetscReal time, Vec u, void *ctx) ;
-PetscErrorCode IdealRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) ;
+PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) ;
 
 // A hydrodynamic class with access to all the necessary variables and functions
 // to solve the hydrodynamic equations. The class is constructed with the inputs
@@ -247,18 +257,26 @@ public:
   const EOS &eos;
 
   DM domain;
-  Vec solution, solution_local, solution_last;
+  Vec solution;
+  Vec solution_local;
+  Vec solution_last;
+  double xmin, xmax, dx;
 
   TS stepper;
-  double xmin, xmax, dx;  
+  Vec Residual;
+  Mat Jacobian;
+
   PetscViewer H5viewer;
 
-  // constructor creates the grid/domain, solution vector,
-  // time stepper, and an input-output viewer HDF5.
   Vischydro (const Json::Value &in, const EOS &eosin) : inputs(in), eos(eosin) {
     const int stencil_width = 2;
-    DMDACreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, get_inputs("NX").asInt(),
-                VischydroNode::NDOF, stencil_width, 0, &domain); 
+    DMDACreate2d(PETSC_COMM_WORLD, 
+                DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC,  // periodic in both directions
+                DMDA_STENCIL_STAR,
+                get_inputs("NX").asInt(), get_inputs("NY").asInt(),
+                PETSC_DECIDE, PETSC_DECIDE,  // let PETSc decide processor layout
+                VischydroNode::NDOF, stencil_width, 
+                NULL, NULL, &domain);
     DMSetFromOptions(domain);
     DMSetUp(domain);
 
@@ -266,15 +284,21 @@ public:
     DMCreateLocalVector(domain, &solution_local);
     VecDuplicate(solution_local, &solution_last);
 
-    // grid spacing
+    // Construct the grid spacing
     xmin = get_inputs("xmin").asDouble();
     xmax = get_inputs("xmax").asDouble();
     dx = (xmax - xmin) / (double)(get_inputs("NX").asInt() - 1);
+    double ymin = get_inputs("ymin").asDouble();
+    double ymax = get_inputs("ymax").asDouble();
+    double dy = (ymax - ymin) / (double)(get_inputs("NY").asInt() - 1);
     std::cout << "xmin: " << xmin << std::endl;
     std::cout << "xmax: " << xmax << std::endl;
     std::cout << "dx: " << dx << std::endl;
+    std::cout << "ymin: " << ymin << std::endl;
+    std::cout << "ymax: " << ymax << std::endl;
+    std::cout << "dy: " << dy << std::endl;
 
-    // time spacing
+    // Construct the time grid
     double initial_time = get_inputs("initial_time").asDouble();
     double cfl = get_inputs("cfl_max").asDouble();
     double dt = cfl * dx;
@@ -283,29 +307,36 @@ public:
     std::cout << "dt: " << dt << std::endl;
     std::cout << "final_time: " << final_time << std::endl;
 
-    // Create the time stepper and link it to the domain, the solution and RHS function
+    // Create the time stepper
     TSCreate(PETSC_COMM_WORLD, &stepper);
-    TSSetApplicationContext(stepper, this);
+    TSSetApplicationContext(stepper, this) ;
     TSSetDM(stepper, domain); 
     TSSetType(stepper, TSARKIMEX);
     TSSetProblemType(stepper,  TS_NONLINEAR);
-    TSSetEquationType(stepper, TS_EQ_DAE_SEMI_EXPLICIT_INDEX1);
-    TSSetSolution(stepper, solution);
-    TSSetRHSFunction(stepper, NULL, IdealRHSFunction, this);
+    TSSetEquationType(stepper, TS_EQ_DAE_SEMI_EXPLICIT_INDEX1); 
 
-    // Set up the time parameters for the stepper
+    TSSetSolution(stepper, solution);
+    TSSetRHSFunction(stepper, NULL, EulerRHSFunction, this);
+
+    // Create the Residual and Jacobian
+    DMCreateGlobalVector(domain, &Residual);
+    DMCreateMatrix(domain, &Jacobian);
+
+    // Not using implicit functions for ideal hydro
+
+    // Not sure we need this. This forces 
+    // at least one iteration of the solver
+    SNES snes; 
+    TSGetSNES(stepper, &snes);
+    SNESSetForceIteration(snes, PETSC_TRUE);
+    SNESSetFromOptions(snes);
+
     TSSetTime(stepper, initial_time);
     TSSetTimeStep(stepper, dt);
     TSSetMaxTime(stepper, final_time);
     TSSetExactFinalTime(stepper, TS_EXACTFINALTIME_MATCHSTEP);
     TSSetPostStep(stepper, PostStepInversion);
     TSSetFromOptions(stepper);
-
-    // Nonlinear solver options
-    SNES snes; 
-    TSGetSNES(stepper, &snes);
-    SNESSetForceIteration(snes, PETSC_TRUE);
-    SNESSetFromOptions(snes);
 
     // Create the HDF5 viewer (for output only)
     std::string iofilename = get_inputs("iofilename").asString();
@@ -317,8 +348,8 @@ public:
     
     // Note: In PETSC at a processor ixs is starting and ixm is total number of grid points
     // hence the total grid points are from ixs to ixs+ixm-1 on a processor
-    int ixs, ixm;
-    DMDAGetCorners(domain, &ixs, 0, 0, &ixm, 0, 0);
+    int ixs, iys, ixm, iym;
+    DMDAGetCorners(domain, &ixs, &iys, 0, &ixm, &iym, 0);
     DMDAVecGetArray(domain, solution, &asol);
     
     // Parameters for Gaussian
@@ -326,23 +357,25 @@ public:
     double sigma = 10.0;    // width
     double xmid = 0.5 * (xmin + xmax);
     double ux0 = 0.0; // initial velocity
-    
-    for (int i = ixs; i < ixs + ixm; i++) {
-      double x = xmin + i * dx;
-      asol[i].e = amplitude * std::exp(- (x - xmid) * (x - xmid) / (2.0 * sigma * sigma));
-      asol[i].ux = ux0;
-      FillVischydroNode(asol[i], eos);
+    for (int j = iys; j < iys + iym; i++) {
+      for (int i = ixs; i < ixs + ixm; i++) {
+        double x = xmin + i * dx;
+        double y = ymin + j * dy;
+        asol[i].e = amplitude * std::exp(- (x - xmid) * (x - xmid) / (2.0 * sigma * sigma));
+        asol[i].ux = ux0;
+        FillVischydroNode(asol[i], eos);
+      }
     }
-    
     // Fill in the boundary cells and the local last solution based on the initial conditions.
     DMGlobalToLocal(domain, solution, INSERT_VALUES, solution_last);
     DMDAVecRestoreArray(domain, solution, &asol);
     PetscObjectSetName((PetscObject)solution, "initialdatain");
     VecView(solution, H5viewer);
   }
-  
   ~Vischydro() {
     PetscViewerDestroy(&H5viewer);
+    MatDestroy(&Jacobian);
+    VecDestroy(&Residual);
     TSDestroy(&stepper);
     VecDestroy(&solution);
     VecDestroy(&solution_local);
@@ -365,7 +398,7 @@ public:
 // called by the time stepper. The function uses the current solution vector U and
 // computes the right-hand side i.e time derivative of charges and assemble it into G. 
 // The context ctx is a pointer to the Vischydro class.
-PetscErrorCode IdealRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
+PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   const Vischydro &run = *(Vischydro *)ctx;
 
   // Copy the U into a local array including the boundary values
@@ -384,11 +417,8 @@ PetscErrorCode IdealRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
 
   VischydroNode *ag;
   PetscCall(DMDAVecGetArray(run.domain, G, &ag));
-  
-  // Note: In PETSC at a processor ixs is starting and ixm is total number of grid points
-  // hence the total grid points are from ixs to ixs+ixm-1 on a processor
   int ixs, ixm ;
-  PetscCall(DMDAGetCorners(run.domain, &ixs, 0, 0, &ixm, 0, 0));
+  PetscCall(DMDAGetCorners(run.domain, &ixs, &iys, 0, &ixm, &iym, 0));
 
   const double epsilon = 1.e-8;
   limitter slope(limitter::kCenteredMinMod);
@@ -471,8 +501,8 @@ PetscErrorCode PostStepInversion(TS ts) {
   
   // Note: In PETSC at a processor ixs is starting and ixm is total number of grid points
   // hence the total grid points are from ixs to ixs+ixm-1 on a processor
-  int ixs, ixm;
-  DMDAGetCorners(run.domain, &ixs, 0, 0, &ixm, 0, 0);
+  int ixs, ixm, iys, iym;
+  DMDAGetCorners(run.domain, &ixs, &iys, 0, &ixm, &iym, 0);
   
   // grid points go from ixs to ixs+ixm-1 hence the following range on for loop
   for (int i = ixs; i < ixs + ixm; i++) {
@@ -527,8 +557,9 @@ int main(int argc, char **argv)
   }
   std::cout << inputs << std::endl;
 
-  //  Initialize the EOS and Vischydro class
-  EOS idgas(3., 0);
+  //  Initialize the EOS
+  EOS idgas(3., 0) ;
+  
   std::unique_ptr<Vischydro> vischydro = std::make_unique<Vischydro>(inputs, idgas);
 
   //If Petsc was called with -help then exit the program and petsc will print out the help options
@@ -541,6 +572,8 @@ int main(int argc, char **argv)
     PetscFinalize();
     return 0;
   }
+
+  // Start the actual time stepping 
   
   // Add a monitor to the stepper
   TSMonitorSet(vischydro->stepper, VischydroMonitor, vischydro.get(), NULL);
@@ -554,7 +587,7 @@ int main(int argc, char **argv)
   PostStepInversion(vischydro->stepper);
   PetscViewerHDF5PopTimestepping(vischydro->H5viewer);
 
-  // Write out the FINAL GRID separately to the hdf5 file
+  // Write out the final grid to the hdf5 file 
   PetscObjectSetName((PetscObject)vischydro->solution, "finaldata");
   PetscCall(VecView(vischydro->solution, vischydro->H5viewer));
 
