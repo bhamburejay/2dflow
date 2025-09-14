@@ -22,3 +22,12 @@ a.out
 *.aux
 *.synctex.gz
 *.log
+*.h5
+*.jpeg
+*.png
+*.fls
+*.aux
+*.fdb_latexmk
+*.out   
+*.log
+*.gz

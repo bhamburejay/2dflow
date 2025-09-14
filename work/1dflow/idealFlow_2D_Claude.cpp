@@ -5,11 +5,10 @@
 #include <algorithm>
 #include <array>
 #include "json/json.h"
+#include <petsc.h>
 #include "petscdmda.h"
 #include "petscts.h"
-#include <petsc.h>
 #include <petscviewerhdf5.h>
-
 
 class EOS {
  private:
@@ -32,23 +31,28 @@ class EOS {
     double get_pressure   (double e, double rhob) const {return(1./3.*e);}
 };
 
-
 struct VischydroNode {
-    static const int NDOF = 7;
-    static const int Ncharge = 2;
-    PetscScalar E;
-    PetscScalar M;
-    PetscScalar e;
-    PetscScalar ux;
-    PetscScalar p;
-    PetscScalar beta;
-    PetscScalar cs2;
+
+    double E;   // Energy density
+    double Mx;  // x-momentum density
+    double My;  // y-momentum density (NEW)
+    double e;   // Rest frame energy density
+    double ux;  // x-velocity
+    double uy;  // y-velocity (NEW)
+    double p;   // Pressure
+    double beta; // Inverse temperature
+    double cs2; // Speed of sound squared
+
+    static const int NDOF = 9;  // Now 3 conserved variables: E, Mx, My
+    static const int Ncharge = 3; // E, Mx, My
 
     void zero() {
-      E = 0.0;
-      M = 0.0;
+      E  = 0.0;
+      Mx = 0.0;
+      My = 0.0;
       e = 0.0;
       ux = 0.0;
+      uy = 0.0;
       p = 0.0;
       beta = 0.0;
       cs2 = 0.0;
@@ -94,7 +98,7 @@ struct VischydroNode {
 
 // FillVischydroNode is a function that fills the VischydroNode with the values
 // of the EOS, starting from the energy density e and the velocity ux. The
-// values of E and M are calculated from the EOS.
+// charges E and M are calculated from the EOS.
 void FillVischydroNode(VischydroNode &node, const EOS &eos) {
   
   double rhob = 0.;
@@ -121,7 +125,6 @@ double idealHydroCellIFunction(const double &e, /* out */ VischydroNode &n, cons
 
   return e  + n.p - (n.E + n.p) * (1. - vx *vx) ;
 }
-
 
 // Returns the derivative of idealHydroCellIFunction with respect to the energy
 // density e. As in idealHydroCellIFunction, the pressure, beta, and cs2 are
@@ -152,7 +155,6 @@ double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n, const 
   int it = 0;
   const int maxit = 100 ;
   while (it < maxit) {
-    //std::cout << "f = " << f << std::endl;
     if (std::abs(f) < abstol or std::abs(f/e) < reltol) {
       break ;
     }
@@ -166,23 +168,6 @@ double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n, const 
     std::abort();
   }
   return e;
-}
-
-// Test idealHydroCellSolve for a specified energy density and velocity.
-void test_idealHydroCellSolve() {
-  EOS eos;
-  VischydroNode n;
-  double e = 1.0;
-  double vx = 0.5 ;
-  n.e = e;
-  n.ux = vx/sqrt(1. - vx*vx) ;
-  FillVischydroNode(n, eos);
-  n.print();
-  
-  e = 1.1 ;
-  n.e = e;
-  idealHydroCellSolve(e, n, eos);
-  n.print();
 }
 
 // Returns the largest and smalllest (most-negative) propagation velocities for
@@ -226,9 +211,7 @@ std::tuple<double, double> propagationVelocity(const double &cs2L, const double
   return std::make_tuple(ap, am);
 }
 
-
 // A class that determines the slope of of a function using a slope limiter and three points. The usage is as follows:  
-//
 // limitter slope(limitter::kCenteredMinMod);
 // m = slope(qm, q0, qp);   // m is the slope based on the three points qm, q0, and qp.
 class limitter {
@@ -258,71 +241,15 @@ public:
   limitter(const int &imethod = limitter::kCenteredMinMod) : method(imethod){};
 };
 
-// Test the limitter class, by writing out a function and its interpolated points.
-void test_limitter() {
-  // Tests the limitter class ;
-
-  // Construct a function which we interpolate with slope limitted derivs
-  int nx = 200;
-  double xmin = -2;
-  double xmax = 2;
-  double dx = (xmax - xmin) / (double)nx;
-  int ix;
-  std::vector<double> f(nx, 0);
-  double sigma = 1.;
-  for (ix = 0; ix < nx; ix++) {
-    double x = xmin + ix * dx;
-    f[ix] = exp(-x * x / (2.0 * sigma * sigma));
-  }
-
-  // Interpolate the function with the limitter and write out the results
-  limitter slope;
-  std::ofstream ofs("test_slope.dat");
-  for (ix = 0; ix < nx; ix++) {
-    double xm = (ix == 0) ? f[ix] : f[ix - 1];
-    double xp = (ix == nx - 1) ? f[ix] : f[ix + 1];
-    double df = slope(xm, f[ix], xp);
-    ofs << xmin + ix * dx << " " << f[ix] << " " << df << std::endl;
-  }
-  ofs.close();
-}
-
-struct Vischydro ;
-
+struct VischydroNode ;
 
 PetscErrorCode PostStepInversion(TS ts) ;
-
 PetscErrorCode VischydroMonitor(TS ts, PetscInt step, PetscReal time, Vec u, void *ctx) ;
-
 PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) ;
-
-PetscErrorCode LHSIFunction(TS ts, PetscReal t, Vec u, Vec udot, Vec F, void *);
-
-PetscErrorCode LHSIJacobian(TS ts, PetscReal t, Vec u, Vec udot,
-                            PetscReal sigma, Mat Jacobian, Mat PreJacobian,
-                            void *context);
-
 
 // A hydrodynamic class with access to all the necessary variables and functions
 // to solve the hydrodynamic equations. The class is constructed with the inputs
 // and the equation of state. The class constructs the domain, the solution vector, the stepper, and an input-output viewer. 
-//
-// On construction, the initial energy and velocity are read from the HDF5 file,
-// inputs['iofilename'], by reading in an array of the size NX*NDOF, called
-// intialdata . The initial energy and velocity are used to fill up the
-// remaining hydrodynamic variables. 
-//
-// The class has a timestep object, which should be used to advance the solution
-// (see main program below).  The timestep dt is determined by the CFL condition
-// and the grid spacing, both are read from the inputs. The code was written for
-// fixed time steps. The final time is also read from the inputs.  The system is
-// normally advanced to the until almost the final time, and then the timestep
-// is shortened to reach exactly the final time. Look at the TS Options in
-// PETSC.
-//
-// Basically, the class does very little, except provide a place to put store
-// the main PETSc objects, the inputs, and the EOS.  The actual work is done by
-// TSSolve.
 struct Vischydro {
 public:
 
@@ -343,8 +270,13 @@ public:
 
   Vischydro (const Json::Value &in, const EOS &eosin) : inputs(in), eos(eosin) {
     const int stencil_width = 2;
-    DMDACreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, get_inputs("NX").asInt(),
-        VischydroNode::NDOF, stencil_width, 0, &domain); 
+    DMDACreate2d(PETSC_COMM_WORLD, 
+                DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC,  // periodic in both directions
+                DMDA_STENCIL_STAR,
+                get_inputs("NX").asInt(), get_inputs("NY").asInt(),
+                PETSC_DECIDE, PETSC_DECIDE,  // let PETSc decide processor layout
+                VischydroNode::NDOF, stencil_width, 
+                NULL, NULL, &domain);
     DMSetFromOptions(domain);
     DMSetUp(domain);
 
@@ -356,9 +288,15 @@ public:
     xmin = get_inputs("xmin").asDouble();
     xmax = get_inputs("xmax").asDouble();
     dx = (xmax - xmin) / (double)(get_inputs("NX").asInt() - 1);
+    double ymin = get_inputs("ymin").asDouble();
+    double ymax = get_inputs("ymax").asDouble();
+    double dy = (ymax - ymin) / (double)(get_inputs("NY").asInt() - 1);
     std::cout << "xmin: " << xmin << std::endl;
     std::cout << "xmax: " << xmax << std::endl;
     std::cout << "dx: " << dx << std::endl;
+    std::cout << "ymin: " << ymin << std::endl;
+    std::cout << "ymax: " << ymax << std::endl;
+    std::cout << "dy: " << dy << std::endl;
 
     // Construct the time grid
     double initial_time = get_inputs("initial_time").asDouble();
@@ -375,7 +313,6 @@ public:
     TSSetDM(stepper, domain); 
     TSSetType(stepper, TSARKIMEX);
     TSSetProblemType(stepper,  TS_NONLINEAR);
-    // Totally need this for the arkimex schemes
     TSSetEquationType(stepper, TS_EQ_DAE_SEMI_EXPLICIT_INDEX1); 
 
     TSSetSolution(stepper, solution);
@@ -385,8 +322,7 @@ public:
     DMCreateGlobalVector(domain, &Residual);
     DMCreateMatrix(domain, &Jacobian);
 
-    TSSetIFunction(stepper, Residual, LHSIFunction, this);
-    TSSetIJacobian(stepper, Jacobian, Jacobian, LHSIJacobian, this);
+    // Not using implicit functions for ideal hydro
 
     // Not sure we need this. This forces 
     // at least one iteration of the solver
@@ -399,33 +335,42 @@ public:
     TSSetTimeStep(stepper, dt);
     TSSetMaxTime(stepper, final_time);
     TSSetExactFinalTime(stepper, TS_EXACTFINALTIME_MATCHSTEP);
-    //Context must have been set. See TSSetApplicationContext
     TSSetPostStep(stepper, PostStepInversion);
     TSSetFromOptions(stepper);
 
-    // Create the HDF5 viewer 
+    // Create the HDF5 viewer (for output only)
     std::string iofilename = get_inputs("iofilename").asString();
     PetscViewerHDF5Open(PETSC_COMM_WORLD, iofilename.c_str(), FILE_MODE_APPEND, &H5viewer);
     PetscViewerSetFromOptions(H5viewer);
-    PetscObjectSetName((PetscObject)solution, "initialdata");
-    VecLoad(solution, H5viewer);
 
-    //Loop over solution and call FillVischydroNode
+    // Initialize solution vector in C++ with Gaussian energy profile
     VischydroNode *asol;
-    int ixs, ixm;
-    DMDAGetCorners(domain, &ixs, 0, 0, &ixm, 0, 0);
+    
+    // Note: In PETSC at a processor ixs is starting and ixm is total number of grid points
+    // hence the total grid points are from ixs to ixs+ixm-1 on a processor
+    int ixs, iys, ixm, iym;
+    DMDAGetCorners(domain, &ixs, &iys, 0, &ixm, &iym, 0);
     DMDAVecGetArray(domain, solution, &asol);
-    for (int i = ixs; i < ixs + ixm; i++) {
-      VischydroNode &node = asol[i];
-      FillVischydroNode(node, eos);
+    
+    // Parameters for Gaussian
+    double amplitude = 5.0; // peak value
+    double sigma = 10.0;    // width
+    double xmid = 0.5 * (xmin + xmax);
+    double ux0 = 0.0; // initial velocity
+    for (int j = iys; j < iys + iym; i++) {
+      for (int i = ixs; i < ixs + ixm; i++) {
+        double x = xmin + i * dx;
+        double y = ymin + j * dy;
+        asol[i].e = amplitude * std::exp(- (x - xmid) * (x - xmid) / (2.0 * sigma * sigma));
+        asol[i].ux = ux0;
+        FillVischydroNode(asol[i], eos);
+      }
     }
     // Fill in the boundary cells and the local last solution based on the initial conditions.
     DMGlobalToLocal(domain, solution, INSERT_VALUES, solution_last);
-
     DMDAVecRestoreArray(domain, solution, &asol);
     PetscObjectSetName((PetscObject)solution, "initialdatain");
     VecView(solution, H5viewer);
-    
   }
   ~Vischydro() {
     PetscViewerDestroy(&H5viewer);
@@ -437,6 +382,7 @@ public:
     VecDestroy(&solution_last);
     DMDestroy(&domain);
   }
+  
   Json::Value get_inputs(const std::string &key) const {
     if (!inputs.isMember(key)) {
       std::cerr << "Key " << key << " not found in inputs" << std::endl;
@@ -445,6 +391,13 @@ public:
     return inputs[key];
   }
 };
+
+
+// Thus function computes the right-hand side of the hydrodynamic equations
+// using the Kurganov-Tadmor scheme with a slope limiter. The function is
+// called by the time stepper. The function uses the current solution vector U and
+// computes the right-hand side i.e time derivative of charges and assemble it into G. 
+// The context ctx is a pointer to the Vischydro class.
 PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   const Vischydro &run = *(Vischydro *)ctx;
 
@@ -465,18 +418,19 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   VischydroNode *ag;
   PetscCall(DMDAVecGetArray(run.domain, G, &ag));
   int ixs, ixm ;
-  PetscCall(DMDAGetCorners(run.domain, &ixs, 0, 0, &ixm, 0, 0));
+  PetscCall(DMDAGetCorners(run.domain, &ixs, &iys, 0, &ixm, &iym, 0));
 
   const double epsilon = 1.e-8;
   limitter slope(limitter::kCenteredMinMod);
 
-  // Solve for the internal state
+  // Update value of energy density at each grid point
   for (int i = ixs-2; i < ixs + ixm +2; i++) {
     idealHydroCellSolve(asol_last[i].e, asol[i], run.eos);
     asol_last[i] = asol[i];
   }
 
   for (int i = ixs; i < ixs + ixm + 1; i++) {
+    // temporary nodes for left and right states
     VischydroNode nL{};
     VischydroNode nR{};
     
@@ -544,239 +498,19 @@ PetscErrorCode PostStepInversion(TS ts) {
   PetscCall(DMDAVecGetArray(run.domain, run.solution, &au));
   VischydroNode *au_last;
   PetscCall(DMDAVecGetArray(run.domain, run.solution_last, &au_last));
-  int ixs, ixm;
-  DMDAGetCorners(run.domain, &ixs, 0, 0, &ixm, 0, 0);
   
+  // Note: In PETSC at a processor ixs is starting and ixm is total number of grid points
+  // hence the total grid points are from ixs to ixs+ixm-1 on a processor
+  int ixs, ixm, iys, iym;
+  DMDAGetCorners(run.domain, &ixs, &iys, 0, &ixm, &iym, 0);
+  
+  // grid points go from ixs to ixs+ixm-1 hence the following range on for loop
   for (int i = ixs; i < ixs + ixm; i++) {
     idealHydroCellSolve(au_last[i].e, au[i], run.eos);
     au_last[i] = au[i];
   }
   PetscCall(DMDAVecRestoreArray(run.domain, run.solution, &au));
   PetscCall(DMDAVecRestoreArray(run.domain, run.solution_last, &au_last));
-  return 0;
-}
-
-
-
-// Helper routine sigmaxxxx taking hydrocell and etabys as argument and sigma as return value
-double sigmaxxxx(const VischydroNode &nd, const double &etabys) {
-  double T = 1. / nd.get_beta();
-  double s = nd.s(); 
-  double vx = nd.vx();
-  double cs2 = nd.get_cs2();
-  double u0 = nd.u0();
-  double sigma = T * s * (4. / 3.) * etabys / pow(u0 * u0 * (1 - vx * vx * cs2), 2);
-  return sigma;
-}
-
-double derivative_dbxdm(const VischydroNode &nd) {
-  double v2 = nd.vx() *  nd.vx();
-  double u0 = nd.u0();
-  double cs2 = nd.get_cs2();
-  return (3.*cs2*v2 +1 ) /(1 -v2 * cs2) * u0 * nd.get_beta() /nd.w();
-}
-
-double derivative_dbxde(const VischydroNode &nd) {
-  double v2 = nd.vx() *  nd.vx();
-  double u0 = nd.u0();
-  double cs2 = nd.get_cs2();
-  return -nd.vx() * (1  + 2 * cs2  + cs2 * v2) /(1 -v2 * cs2) * u0 * nd.get_beta() /nd.w();
-}
-
-// // Test the sigmaxxxx function
-// void test_sigmaxxxx() {
-//   EOS eos(0);
-//   VischydroNode nd;
-//   nd.e = 1.0;
-//   double v = 0.99;
-//   nd.ux = v/sqrt(1. - v*v);
-//   FillVischydroNode(nd, eos); 
-//   double etabys = 0.1;
-//   double sigma = sigmaxxxx(nd, etabys);
-//   std::cout << sigma << std::endl;
-// }
-
-// Test derivative_dbxdm
-void test_derivative_dbxdm() {
-
-  EOS eos;
-
-  VischydroNode nd;
-  nd.e = 1.0;
-  double v = 0.99;
-  nd.ux = v/sqrt(1. - v*v);
-  FillVischydroNode(nd, eos); 
-
-
-
-  // Now E is fixed, scan M from 0 up to E
-  int nscan =100000;
-  double safety = 0.99;
-  nd.e = nd.E ;  // Starting gess
-  for (int i = 0; i < nscan-1; i++) {
-    
-    // Handle i
-    double M = i * safety * nd.E / nscan;
-    nd.M = M;
-    idealHydroCellSolve(nd.e, nd, eos);
-    double bx = nd.bx();
-    double dbxdm = derivative_dbxdm(nd); 
-    
-    // Handle i+1
-    double M_plus = (i + 1) * safety * nd.E / nscan;
-    nd.M = M_plus ;
-    idealHydroCellSolve(nd.e, nd, eos);
-    double bx_plus = nd.bx();
-    double dbxdm_plus = derivative_dbxdm(nd); 
-
-    // Compute the numerical derivative using i and i+1
-    double dbxdm_num = (bx_plus - bx) / (M_plus - M) ;
-    double dbxdm_ave = 0.5 * (dbxdm + dbxdm_plus) ;
-
-    // Print out the results
-    std::cout << nd.E << " " << nd.M << " "  << nd.vx() << " " << nd.u0() << " " << dbxdm << " " << dbxdm_plus << " " << dbxdm_num << " " << dbxdm_ave << " " << fabs(dbxdm_num - dbxdm_ave)/dbxdm_ave << std::endl;
-  }
-}
-
-PetscErrorCode LHSIFunction(TS ts, PetscReal t, Vec u, Vec udot, Vec F, void *context){
-  auto run = (Vischydro *)context;
-
-  // Do communcation and fill up boundary cells
-  DMGlobalToLocalBegin(run->domain, u, INSERT_VALUES, run->solution_local);
-  DMGlobalToLocalEnd(run->domain, u, INSERT_VALUES, run->solution_local);
-  
-  // Local array with the boundary cells
-  VischydroNode *au;
-  PetscCall(DMDAVecGetArray(run->domain, run->solution_local, &au));
-
-  // Local array with the boundary cells guess
-  VischydroNode *au_last;
-  PetscCall(DMDAVecGetArray(run->domain, run->solution_last, &au_last));
-
-  int ixs, ixm;
-  DMDAGetCorners(run->domain, &ixs, 0, 0, &ixm, 0, 0);
-  
-  // Loop over the grid and call idealHydroCellSolve
-  for (int i = ixs-1; i < ixs + ixm+1; i++) {
-    idealHydroCellSolve(au_last[i].e, au[i], run->eos);
-    au_last[i] = au[i];
-  }
-
-  double etabys = run->get_inputs("eta_over_s").asDouble() ;
-  double dx = run->dx;
-  VecCopy(udot, F) ;
-  VischydroNode *aF;
-  PetscCall(DMDAVecGetArray(run->domain, F, &aF));
-
-  for (int i=ixs; i<ixs+ixm; i++) {
-
-    double sigmap = 0.5 * (sigmaxxxx(au[i+1], etabys) + sigmaxxxx(au[i], etabys)) / (dx * dx)  ;
-    double sigmam = 0.5 * (sigmaxxxx(au[i], etabys) + sigmaxxxx(au[i-1], etabys)) / (dx * dx) ;
-
-    aF[i].M -= (sigmap * (au[i+1].bx()- au[i].bx()) - sigmam * (au[i].bx() - au[i-1].bx())) ;
-  }
-  PetscCall(DMDAVecRestoreArray(run->domain, F, &aF));
-  PetscCall(DMDAVecRestoreArray(run->domain, run->solution_local, &au));
-  PetscCall(DMDAVecRestoreArray(run->domain, run->solution_last, &au_last));
-  return 0;
-}
-
-PetscErrorCode LHSIJacobian(TS ts, PetscReal t, Vec u, Vec udot, PetscReal shift, Mat J, Mat P, void *context)  {
-  auto run = (Vischydro *)context;
-  // Do communcation and fill up boundary cells
-  DMGlobalToLocalBegin(run->domain, u, INSERT_VALUES, run->solution_local);
-  DMGlobalToLocalEnd(run->domain, u, INSERT_VALUES, run->solution_local);
-
-  // Local array with the boundary cells
-  VischydroNode *au;
-  DMDAVecGetArray(run->domain, run->solution_local, &au);
-
-  VischydroNode *au_last;
-  DMDAVecGetArray(run->domain, run->solution_last, &au_last);
-
-  double etabys = run->get_inputs("eta_over_s").asDouble() ;
-  double dx = run->dx; 
-
-  // Is this needed?
-  PetscCall(MatZeroEntries(P));
-
-  int ixs, ixm; 
-  DMDAGetCorners(run->domain, &ixs, 0, 0, &ixm, 0, 0);
-  // Loop over the grid and call idealHydroCellSolve
-  for (int i = ixs-1; i < ixs + ixm+1; i++) {
-    idealHydroCellSolve(au_last[i].e, au[i], run->eos);
-    au_last[i] = au[i];
-  }
-
-  for (int i =ixs; i < ixs + ixm; i++) {
-    for (int c = 0 ; c < VischydroNode::NDOF; c++) {
-      // Define the coordinates of the row
-      MatStencil row{};
-      row.i = i;
-      row.c = c;
-
-      // Define the relative coordinates of the column
-      PetscInt nc = 0;
-      MatStencil column[6]{};
-      PetscScalar value[6]{}; 
-
-      if (c ==1)  {
-        // Loop over the columns and fill the values. 
-        // Only the same field contributes to the derivative.    
-        for (int s = 0; s < 3; s++) {
-          column[s].c = c ;
-        }
-
-        double sigmap = 0.5 * (sigmaxxxx(au[i+1], etabys) + sigmaxxxx(au[i], etabys)) / (dx * dx)  ;
-        double sigmam = 0.5 * (sigmaxxxx(au[i], etabys) + sigmaxxxx(au[i-1], etabys)) / (dx * dx) ;
-        double dbxp = 0.5 * (derivative_dbxdm(au[i+1]) + derivative_dbxdm(au[i])) ;
-        double dbxm = 0.5 * (derivative_dbxdm(au[i]) + derivative_dbxdm(au[i-1])) ;
-
-        // i=1
-        column[nc].i = i+1 ;
-        value[nc++] = -sigmap * dbxp ;
-        // i=-1
-        column[nc].i = i-1 ;
-        value[nc++] = -sigmam * dbxm ;
-        // i=0
-        column[nc].i = i ;
-        value[nc++] = sigmap * dbxp + sigmam * dbxm  + shift ;
-      
-        dbxp = 0.5 * (derivative_dbxde(au[i+1]) + derivative_dbxde(au[i])) ;
-        dbxm = 0.5 * (derivative_dbxde(au[i]) + derivative_dbxde(au[i-1])) ;
-
-        // i=1
-        column[nc].c = c-1;
-        column[nc].i = i+1 ;
-        value[nc++] = -sigmap * dbxp ;
-        // i=-1
-        column[nc].c = c-1;
-        column[nc].i = i-1 ;
-        value[nc++] = -sigmam * dbxm ;
-        // i=0
-        column[nc].c = c-1;
-        column[nc].i = i ;
-        value[nc++] = sigmap * dbxp + sigmam * dbxm  ;
-
-      } else{
-        // i=0
-        column[nc].c = c ;
-        column[nc].i = i ;
-        value[nc++] = shift ;
-      }
-      MatSetValuesStencil(P, 1, &row, nc, column, value, INSERT_VALUES);
-    }
-  }
-  DMDAVecRestoreArray(run->domain, run->solution_local, &au);
-  DMDAVecRestoreArray(run->domain, run->solution_last, &au_last);
-
-  MatAssemblyBegin(P, MAT_FINAL_ASSEMBLY);
-  MatAssemblyEnd(P, MAT_FINAL_ASSEMBLY);
-  if (J != P) {
-    MatAssemblyBegin(J, MAT_FINAL_ASSEMBLY);
-    MatAssemblyEnd(J, MAT_FINAL_ASSEMBLY);
-  }
-
   return 0;
 }
 
@@ -801,8 +535,6 @@ PetscErrorCode VischydroMonitor(TS ts, PetscInt step, PetscReal time, Vec u, voi
 // Main routine that reads the inputs from the json file, initializes the EOS,
 // and constructs the Vischydro object. The solution is advanced in time using
 // the TSSolve routine. The final solution is written to the HDF5 file.
-//
-// calling sequence: ./vischydro -help
 int main(int argc, char **argv)
 {
 
@@ -811,8 +543,8 @@ int main(int argc, char **argv)
   // Check to so if the inputs file was specified on the command line with -inputs filename.json . If not, then use inputs.json.
   PetscBool foundInput = PETSC_FALSE;
   char inputFilePath[PETSC_MAX_PATH_LEN] = "inputs.json";
-  PetscOptionsBegin(PETSC_COMM_WORLD, NULL, "Vischydro", NULL);
-  PetscOptionsString("-inputs", ".json input file for Vischydro", "inputs.json is used to configure Vischydro", inputFilePath, inputFilePath, sizeof(inputFilePath), &foundInput);
+  PetscOptionsBegin(PETSC_COMM_WORLD, NULL, "idealOutput", NULL);
+  PetscOptionsString("-inputs", ".json input file for idealHydro", "inputs.json is used to configure idealHydro", inputFilePath, inputFilePath, sizeof(inputFilePath), &foundInput);
   PetscOptionsEnd();
 
   Json::Value inputs;

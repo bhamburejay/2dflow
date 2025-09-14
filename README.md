@@ -19,7 +19,7 @@ This creates the tools to build the source code,  in particular it constructs th
 make 
 
 
-Trouble Shooting
+Troublshooting
 ================
 
 # MPI
@@ -45,19 +45,9 @@ the compile flags for petsc:
 pkg-config --cflags petsc
 pkg-config --libs petsc
 ```
-# For Dekrayat
-The following file are important at the moment,
+Troubleshooting End
+=====================
 
-main file --> work/2dflow.cpp
-input file --> work/2dflow_input.json or src/2dflow_input.json (identical files)
-plots --> work/2dflow_plot.py
-output file --> src/energy_out.h5
-
-If CMake works correctly (as described above) then you should have build/2dflow.exe
-Run the executable ./2dflow.exe, this will produce the output file src/energy_out.h5
-then run the python file work/2dflow_plot.py
-
-In the end you should get an exponentially decreasing plot
 
 # To check for memory corruption or leaks
 ```
@@ -84,3 +74,15 @@ mpicxx -o Vischydro.exe `pkg-config --cflags petsc` Vischydro.cpp jsoncpp.cpp  `
 ```
 mpicxx -o 2dflow_main.exe `pkg-config --cflags petsc` 2dflow_main.cpp VischydroNode.cpp Vischydro.cpp `pkg-config --libs petsc` -ljsoncpp
 ```
+```
+mpicxx -g -O0 -o 2dflow_main.exe `pkg-config --cflags petsc` 2dflow_main.cpp VischydroNode.cpp Vischydro.cpp `pkg-config --libs petsc` -ljsoncpp
+```
+# compile and run 1D idealFlow code (onlyu works when CFL < 0.14 and (NX mod 5)=0)
+# (NOTE: While plotting via python files change the Field, E, M, ux etc)
+```
+mpicxx -o idealFlow idealFlow.cpp `pkg-config --cflags petsc` `pkg-config --libs petsc` -ljsoncpp
+
+mpiexec -n 1 ./idealFlow
+
+python idealPlot.py idealOutput1.h5 --field E
+``` 

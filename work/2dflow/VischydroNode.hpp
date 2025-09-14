@@ -42,10 +42,10 @@ struct VischydroNode {
     std::cout << "cs2 = " << cs2 << std::endl;
   }
   std::array<double, VischydroNode::Ncharge> fluxX() const {
-    return {M[0], M[0] * M[0] / (E + p) + p, M[0] * M[1] / (E + p)};
+    return {M[0], ((M[0] * M[0]) / (E + p)) + p, M[0] * M[1] / (E + p)};
   }
   std::array<double, VischydroNode::Ncharge> fluxY() const {
-    return {M[1], M[1] * M[0] / (E + p), M[1] * M[1] / (E + p) + p};
+    return {M[1], M[1] * M[0] / (E + p), ((M[1] * M[1]) / (E + p)) + p};
   }
   std::array<double, VischydroNode::Ncharge> charge() const {
     return {E, M[0], M[1]};
@@ -60,7 +60,14 @@ struct VischydroNode {
   double by() const { return beta * u[1]; }
   double w() const { return e + p; }
   double s() const { return beta * (e + p); }
+
+  std::array<double, dim> velocity() const {
+    return {vx(), vy()};
+  }
+
+  double get_speed() const { return sqrt(vx() * vx() + vy() * vy()); }
 };
+
 
 // FillVischydroNode is a function that fills the VischydroNode with the values
 // of the EOS, starting from the energy density e and the velocity u[]. The

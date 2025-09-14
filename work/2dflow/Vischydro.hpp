@@ -20,7 +20,7 @@ public:
   // PETSc objects
   Json::Value &configuration;
   DM domain, cdomain;
-  Vec solution, coordinates, local_solution;
+  Vec solution, coordinates, local_solution, solution_last;
   TS stepper;
   const EOS *eos;
 
