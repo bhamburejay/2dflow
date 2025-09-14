@@ -32,11 +32,13 @@ class EOS {
     double get_pressure   (double e, double rhob) const {return(1./3.*e);}
 };
 
-// A struct that holds the variables for a single grid point.
+// A struct that holds the variables for a single grid point/node
 struct VischydroNode {
     static const int NDOF = 7;
     static const int Ncharge = 2;
-    PetscScalar E, M, e, ux, p, beta, cs2;
+
+    // variables at a grid point
+    PetscScalar e, ux, p, beta, cs2, E, M;
 
     void zero() {
       E = 0.0;
@@ -56,35 +58,23 @@ struct VischydroNode {
       std::cout << "p = " << p << std::endl; 
       std::cout << "beta = " << beta << std::endl; 
       std::cout << "cs2 = " << cs2 << std::endl; 
-    } 
+    }
+    
+    // Flux and Charges at each grid point
     std::array<double, VischydroNode::Ncharge> flux() const {
       return {M,  M * M/(E + p) + p};
     }
     std::array<double, VischydroNode::Ncharge> charge() const {
       return {E, M};
     }
-    double get_beta() const {
-      return beta;
-    }
-    double get_cs2() const {
-      return cs2;
-    }
-    double u0() const {
-      return sqrt(1. + ux * ux);
-    }
-    double vx() const {
-      return M/(E + p);
-    }
-    double bx() const {
-      return beta*ux;
-    }
-    double w() const {
-      return e + p;
-    }
-    double s() const {
-      return beta*(e + p);
-    }
-} ;
+    double get_beta() const {return beta;}
+    double get_cs2() const {return cs2;}
+    double u0() const {return sqrt(1. + ux * ux);}
+    double vx() const {return M/(E + p);}
+    double bx() const {return beta*ux;}
+    double w() const {return e + p;}
+    double s() const {return beta*(e + p);}
+};
 
 // FillVischydroNode is a function that fills the VischydroNode with the values
 // of the EOS, starting from the energy density e and the velocity ux. The
@@ -160,7 +150,7 @@ double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n, const 
   return e;
 }
 
-// Returns the largest and smalllest (most-negative) propagation velocities for
+// Returns the largest and smalllest (most-negative) signal propagation speed at a point in the fluid
 // a given speed of sound cs2, velocity ux, and Lorentz factor u0.
 std::tuple<double, double> idealPropagationVelocity(const double &cs2, const double &ux, const double &u0)
 {
@@ -176,7 +166,7 @@ std::tuple<double, double> idealPropagationVelocity(const double &cs2, const dou
 
 // Given two states, left and right, this function returns the largest and
 // smallest propagation velocities, ap and am, respectively. The states are
-// given by the speed of sound cs2 and the velocity ux and Lorentz factor u0. If
+// given by the speed of sound cs2, velocity ux and Lorentz factor u0. If
 // usespeedoflight is true, then the propagation velocities are set to 1.01 and
 // -1.01, respectively.
 std::tuple<double, double> propagationVelocity(const double &cs2L, const double
@@ -249,16 +239,16 @@ public:
   DM domain;
   Vec solution, solution_local, solution_last;
 
+  double xmin, xmax, dx; 
   TS stepper;
-  double xmin, xmax, dx;  
   PetscViewer H5viewer;
 
   // constructor creates the grid/domain, solution vector,
   // time stepper, and an input-output viewer HDF5.
   Vischydro (const Json::Value &in, const EOS &eosin) : inputs(in), eos(eosin) {
     const int stencil_width = 2;
-    DMDACreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, get_inputs("NX").asInt(),
-                VischydroNode::NDOF, stencil_width, 0, &domain); 
+    DMDACreate1d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, get_inputs("grid")["NX"].asInt(),
+        VischydroNode::NDOF, stencil_width, 0, &domain); 
     DMSetFromOptions(domain);
     DMSetUp(domain);
 
@@ -266,19 +256,19 @@ public:
     DMCreateLocalVector(domain, &solution_local);
     VecDuplicate(solution_local, &solution_last);
 
-    // grid spacing
-    xmin = get_inputs("xmin").asDouble();
-    xmax = get_inputs("xmax").asDouble();
-    dx = (xmax - xmin) / (double)(get_inputs("NX").asInt() - 1);
+    // Construct the grid spacing
+    xmin = get_inputs("grid")["xmin"].asDouble();
+    xmax = get_inputs("grid")["xmax"].asDouble();
+    dx = (xmax - xmin) / (double)(get_inputs("grid")["NX"].asInt() - 1);
     std::cout << "xmin: " << xmin << std::endl;
     std::cout << "xmax: " << xmax << std::endl;
     std::cout << "dx: " << dx << std::endl;
 
-    // time spacing
-    double initial_time = get_inputs("initial_time").asDouble();
-    double cfl = get_inputs("cfl_max").asDouble();
+    // Construct the time grid
+    double initial_time = get_inputs("time")["initial_time"].asDouble();
+    double cfl = get_inputs("time")["cfl_max"].asDouble();
     double dt = cfl * dx;
-    double final_time = get_inputs("final_time").asDouble();
+    double final_time = get_inputs("time")["final_time"].asDouble();
     std::cout << "initial_time: " << initial_time << std::endl;
     std::cout << "dt: " << dt << std::endl;
     std::cout << "final_time: " << final_time << std::endl;
@@ -308,26 +298,26 @@ public:
     SNESSetFromOptions(snes);
 
     // Create the HDF5 viewer (for output only)
-    std::string iofilename = get_inputs("iofilename").asString();
+    std::string iofilename = get_inputs("time")["iofilename"].asString();
     PetscViewerHDF5Open(PETSC_COMM_WORLD, iofilename.c_str(), FILE_MODE_APPEND, &H5viewer);
     PetscViewerSetFromOptions(H5viewer);
 
     // Initialize solution vector in C++ with Gaussian energy profile
     VischydroNode *asol;
     
-    // Note: In PETSC at a processor ixs is starting and ixm is total number of grid points
-    // hence the total grid points are from ixs to ixs+ixm-1 on a processor
-    int ixs, ixm;
-    DMDAGetCorners(domain, &ixs, 0, 0, &ixm, 0, 0);
+    // Note: In PETSC at a processor xs is starting and xm is total number of grid points
+    // hence the total grid points are from xs to xs+xm-1 on a processor
+    int xs, xm;
+    DMDAGetCorners(domain, &xs, 0, 0, &xm, 0, 0);
     DMDAVecGetArray(domain, solution, &asol);
     
-    // Parameters for Gaussian
-    double amplitude = 5.0; // peak value
-    double sigma = 10.0;    // width
-    double xmid = 0.5 * (xmin + xmax);
-    double ux0 = 0.0; // initial velocity
+    // Parameters for Gaussian (read from inputs.json using get_inputs)
+    double amplitude = get_inputs("initial_conditions")["amplitude"].asDouble();
+    double sigma = get_inputs("initial_conditions")["sigma"].asDouble();
+    double xmid = get_inputs("initial_conditions")["xmid"].asDouble();
+    double ux0 = get_inputs("initial_conditions")["ux0"].asDouble();
     
-    for (int i = ixs; i < ixs + ixm; i++) {
+    for (int i = xs; i < xs + xm; i++) {
       double x = xmin + i * dx;
       asol[i].e = amplitude * std::exp(- (x - xmid) * (x - xmid) / (2.0 * sigma * sigma));
       asol[i].ux = ux0;
@@ -378,35 +368,32 @@ PetscErrorCode IdealRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   VischydroNode *asol_last;
   PetscCall(DMDAVecGetArray(run.domain, run.solution_last, &asol_last));
   
-
-  //Compute the flux in the x-direction
   VecZeroEntries(G);
 
   VischydroNode *ag;
   PetscCall(DMDAVecGetArray(run.domain, G, &ag));
   
-  // Note: In PETSC at a processor ixs is starting and ixm is total number of grid points
-  // hence the total grid points are from ixs to ixs+ixm-1 on a processor
-  int ixs, ixm ;
-  PetscCall(DMDAGetCorners(run.domain, &ixs, 0, 0, &ixm, 0, 0));
+  // Note: In PETSC at a processor xs is starting and xm is total number of grid points
+  // hence the total grid points are from xs to xs+xm-1 on a processor
+  int xs, xm ;
+  PetscCall(DMDAGetCorners(run.domain, &xs, 0, 0, &xm, 0, 0));
 
   const double epsilon = 1.e-8;
   limitter slope(limitter::kCenteredMinMod);
 
   // Update value of energy density at each grid point
-  for (int i = ixs-2; i < ixs + ixm +2; i++) {
+  for (int i = xs-2; i < xs + xm +2; i++) {
     idealHydroCellSolve(asol_last[i].e, asol[i], run.eos);
     asol_last[i] = asol[i];
   }
 
-  for (int i = ixs; i < ixs + ixm + 1; i++) {
-    // temporary nodes for left and right states
-    VischydroNode nL{};
-    VischydroNode nR{};
+  for (int i = xs; i < xs + xm + 1; i++) {
     
-  
-    // extrapolate i-1 to i-1/2
-    { 
+    // temporary nodes for left and right states
+    VischydroNode nL{},nR{};
+
+    // extrapolate state variables from i-1 to i-1/2 interface
+    {
       VischydroNode &np = asol[i];
       VischydroNode &n = asol[i - 1];
       VischydroNode &nm = asol[i - 2];
@@ -415,7 +402,7 @@ PetscErrorCode IdealRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
       FillVischydroNode(nL, run.eos);
     }
 
-    // extrapolate i to i-1/2
+    // extrapolate state variables from i to i-1/2 interface
     {
       VischydroNode &np = asol[i + 1];
       VischydroNode &n = asol[i];
@@ -431,7 +418,7 @@ PetscErrorCode IdealRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
     auto qL = nL.charge();
     auto qR = nR.charge();
  
-    // Compute the wave spreads and use this to determine the flux
+    // Compute the wave spreads at the interface and use this to determine the flux
     auto [lambdap, lambdam] = propagationVelocity(nL.cs2, nL.ux, nL.u0(), nR.cs2, nR.ux, nR.u0());  
 
     // Compute the wave spreads and use this to determine the flux
@@ -442,11 +429,12 @@ PetscErrorCode IdealRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
     for (int j = 0; j < VischydroNode::Ncharge; j++) {
       F[j] = (ap * FL[j] + am * FR[j] - ap * am * (qR[j] - qL[j])) / (ap + am);
     }
-    if (i > ixs) {
+    // Flux is at the interface i-1/2, so add to i-1 and subtract from i
+    if (i > xs) {
       ag[i - 1].E -= F[0] / run.dx;
       ag[i - 1].M -= F[1] / run.dx;
     }
-    if (i < ixs + ixm) {
+    if (i < xs + xm) {
       ag[i].E += F[0] / run.dx;
       ag[i].M += F[1] / run.dx;
     }
@@ -468,14 +456,14 @@ PetscErrorCode PostStepInversion(TS ts) {
   PetscCall(DMDAVecGetArray(run.domain, run.solution, &au));
   VischydroNode *au_last;
   PetscCall(DMDAVecGetArray(run.domain, run.solution_last, &au_last));
-  
-  // Note: In PETSC at a processor ixs is starting and ixm is total number of grid points
-  // hence the total grid points are from ixs to ixs+ixm-1 on a processor
-  int ixs, ixm;
-  DMDAGetCorners(run.domain, &ixs, 0, 0, &ixm, 0, 0);
-  
-  // grid points go from ixs to ixs+ixm-1 hence the following range on for loop
-  for (int i = ixs; i < ixs + ixm; i++) {
+
+  // Note: In PETSC at a processor xs is starting and xm is total number of grid points
+  // hence the total grid points are from xs to xs+xm-1 on a processor
+  int xs, xm;
+  DMDAGetCorners(run.domain, &xs, 0, 0, &xm, 0, 0);
+
+  // grid points go from xs to xs+xm-1 hence the following range on for loop
+  for (int i = xs; i < xs + xm; i++) {
     idealHydroCellSolve(au_last[i].e, au[i], run.eos);
     au_last[i] = au[i];
   }
@@ -490,7 +478,7 @@ PetscErrorCode VischydroMonitor(TS ts, PetscInt step, PetscReal time, Vec u, voi
   Vischydro *run = nullptr ;
   TSGetApplicationContext(ts, &run);
 
-  int nprint = run->get_inputs("steps_per_print").asInt();
+  int nprint = run->get_inputs("time")["steps_per_print"].asInt();
   if (step % nprint == 0 ) {
     PetscPrintf(PETSC_COMM_WORLD, "Time, Step: %f %d \n", time, step);
     PetscObjectSetName((PetscObject)run->solution, "solution");

@@ -1,24 +1,27 @@
 {
     "grid": {
-        "NDOF": 7,
+        "NDOF": 9,
         "NX": 200,
+        "NY": 200,
         "xmin": -60.0,
-        "xmax": 60.0
-
-    
+        "xmax": 60.0,
+        "ymin": -60.0,
+        "ymax": 60.0
     },
     "time": {
         "initial_time": 0.0,
         "final_time": 47,
-        "cfl_max": 0.2,
+        "cfl_max": 0.1,
         "eta_over_s": 0.238732414637843,
-        "iofilename": "idealOutput1.h5",
+        "iofilename": "idealOutput2d.h5",
         "steps_per_print": 10
     },
     "initial_conditions": {
         "amplitude": 5.0,
         "sigma": 10.0,
         "xmid": 0.0,
-        "ux0": 0.0
+        "ymid": 0.0,
+        "ux0": 0.0,
+        "uy0": 0.0
     }
 }
