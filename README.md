@@ -84,5 +84,5 @@ mpicxx -o idealFlow idealFlow.cpp `pkg-config --cflags petsc` `pkg-config --libs
 
 mpiexec -n 1 ./idealFlow
 
-python idealPlot.py idealOutput1.h5 --field E
+python idealPlot.py idealOutput1.h5 --field M
 ``` 
