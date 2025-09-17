@@ -1,41 +1,22 @@
 import h5py
+import h5py
 import numpy as np
 import matplotlib.pyplot as plt
 
 # Load data from HDF5 file
-with h5py.File('final_idealhydro2d.h5', 'r') as f:
-    initial = f['initialdata'][:]
+with h5py.File('idealOutput2d.h5', 'r') as f:
+    initial = f['initialdatain'][:]
     final = f['finaldata'][:]
 
-# Assume shape is (NY, NX, 9) for 9 dof
-NY, NX, _ = initial.shape
+# Assume shape is (NY, NX, NDOF)
+NY, NX, NDOF = initial.shape
 x = np.linspace(-60, 60, NX)
 y = np.linspace(-60, 60, NY)
-X, Y = np.meshgrid(x, y)
 
-# Energy density
-
-e_init = initial[:, :, 3]  # e is at index 3
-e_final = final[:, :, 3]
-
-# 2D contour plots
-plt.figure(figsize=(12, 5))
-plt.subplot(1, 2, 1)
-plt.contourf(X, Y, e_init, levels=50, cmap='viridis')
-plt.colorbar(label='Initial Energy Density $e$')
-plt.title('Initial Energy Density (2D)')
-plt.xlabel('x')
-plt.ylabel('y')
-
-plt.subplot(1, 2, 2)
-plt.contourf(X, Y, e_final, levels=50, cmap='viridis')
-plt.colorbar(label='Final Energy Density $e$')
-plt.title('Final Energy Density (2D)')
-plt.xlabel('x')
-plt.ylabel('y')
-
-plt.tight_layout()
-plt.show()
+# Energy density index (match 1D code: e is index 2)
+e_idx = 2
+e_init = initial[:, :, e_idx]
+e_final = final[:, :, e_idx]
 
 # 1D slice along x at center y
 center_y = NY // 2
@@ -62,30 +43,4 @@ plt.legend()
 plt.grid(True)
 plt.tight_layout()
 plt.show()
-
-# Velocity field (ux, uy)
-
-ux_init = initial[:, :, 4]
-uy_init = initial[:, :, 5]
-ux_final = final[:, :, 4]
-uy_final = final[:, :, 5]
-
-# Streamplot for initial velocity over initial energy density
-plt.figure(figsize=(12, 5))
-plt.subplot(1, 2, 1)
-plt.contourf(X, Y, e_init, levels=50, cmap='viridis', alpha=0.7)
-plt.streamplot(X, Y, ux_init, uy_init, color='k', density=1.2, linewidth=1)
-plt.title('Initial Velocity Field (Streamplot)')
-plt.xlabel('x')
-plt.ylabel('y')
-
-# Streamplot for final velocity over final energy density
-plt.subplot(1, 2, 2)
-plt.contourf(X, Y, e_final, levels=50, cmap='viridis', alpha=0.7)
-plt.streamplot(X, Y, ux_final, uy_final, color='k', density=1.2, linewidth=1)
-plt.title('Final Velocity Field (Streamplot)')
-plt.xlabel('x')
-plt.ylabel('y')
-
-plt.tight_layout()
-plt.show()
+plt.grid(True)

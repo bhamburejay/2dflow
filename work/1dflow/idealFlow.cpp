@@ -360,11 +360,8 @@ PetscErrorCode IdealRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
 
   // Copy the U into a local array including the boundary values
   PetscCall(DMGlobalToLocal(run.domain, U, INSERT_VALUES, run.solution_local));
-
-  // Get pointer to local array
   VischydroNode *asol;
   PetscCall(DMDAVecGetArray(run.domain, run.solution_local, &asol));
-  // Get pointer to local array
   VischydroNode *asol_last;
   PetscCall(DMDAVecGetArray(run.domain, run.solution_last, &asol_last));
   
@@ -381,7 +378,7 @@ PetscErrorCode IdealRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   const double epsilon = 1.e-8;
   limitter slope(limitter::kCenteredMinMod);
 
-  // Update value of energy density at each grid point
+  // Update value of energy density at each grid point given E, M
   for (int i = xs-2; i < xs + xm +2; i++) {
     idealHydroCellSolve(asol_last[i].e, asol[i], run.eos);
     asol_last[i] = asol[i];
@@ -500,7 +497,7 @@ int main(int argc, char **argv)
 
   // Check to so if the inputs file was specified on the command line with -inputs filename.json . If not, then use inputs.json.
   PetscBool foundInput = PETSC_FALSE;
-  char inputFilePath[PETSC_MAX_PATH_LEN] = "inputs.json";
+  char inputFilePath[PETSC_MAX_PATH_LEN] = "inputs2d.json";
   PetscOptionsBegin(PETSC_COMM_WORLD, NULL, "idealOutput", NULL);
   PetscOptionsString("-inputs", ".json input file for idealHydro", "inputs.json is used to configure idealHydro", inputFilePath, inputFilePath, sizeof(inputFilePath), &foundInput);
   PetscOptionsEnd();
@@ -531,15 +528,19 @@ int main(int argc, char **argv)
   }
   
   // Add a monitor to the stepper
-  TSMonitorSet(vischydro->stepper, VischydroMonitor, vischydro.get(), NULL);
-
   // The PushTimeStepping is so that the time slices are written out to the HDF5
   // file,  array[0,:], array[1,:], array[2,:] . The context monitor
   // VishydroMonitor is called at each timestep, and can be used to write out
   // the infomation to the hdf5 file at each slice.
+  TSMonitorSet(vischydro->stepper, VischydroMonitor, vischydro.get(), NULL);
   PetscViewerHDF5PushTimestepping(vischydro->H5viewer);
+
+  // time evolve the charges on the grid
   TSSolve(vischydro->stepper, vischydro->solution);
+  
+  // recalculate the primitive variables to be consistent with the time evolved charges
   PostStepInversion(vischydro->stepper);
+
   PetscViewerHDF5PopTimestepping(vischydro->H5viewer);
 
   // Write out the FINAL GRID separately to the hdf5 file

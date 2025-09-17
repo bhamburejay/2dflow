@@ -104,36 +104,53 @@ void FillVischydroNode(VischydroNode &node, const EOS &eos) {
 // are consistent with E and M and the EOS. E and M are not modified in this
 // function, but the pressure, beta, and cs2 are.
 double idealHydroCellIFunction(const double &e, /* out */ VischydroNode &n, const EOS &eos) { 
-  double rhob = 0.;
-  n.e  = e ;
-  n.p = eos.get_pressure(e, rhob);
-  n.beta = 1./eos.get_temperature(e, rhob);
-  n.cs2 = eos.get_cs2(e, rhob);
-    double vx = n.M[0]/(n.E + n.p) ;
-    double vy = n.M[1]/(n.E + n.p) ;
-    for (int i = 0; i < VischydroNode::dim; ++i) {
-        n.u[i] = (i == 0 ? vx : vy) / sqrt(1. - vx * vx - vy * vy);
+    double rhob = 0.;
+    double min_e = 1e-8;
+    n.e  = (e < min_e) ? min_e : e;
+    n.p = eos.get_pressure(n.e, rhob);
+    n.beta = 1./eos.get_temperature(n.e, rhob);
+    n.cs2 = eos.get_cs2(n.e, rhob);
+    double denom = n.E + n.p;
+    if (denom < min_e) denom = min_e;
+    double vx = n.M[0]/denom;
+    double vy = n.M[1]/denom;
+    double gamma2 = 1.0 - vx*vx - vy*vy;
+    if (gamma2 <= 0.0) {
+            vx = 0.0;
+            vy = 0.0;
+            gamma2 = 1.0;
     }
-
-  return e  + n.p - (n.E + n.p) * (1. - vx *vx - - vy*vy) ;
+    for (int i = 0; i < VischydroNode::dim; ++i) {
+            n.u[i] = (i == 0 ? vx : vy) / sqrt(gamma2);
+    }
+    return n.e  + n.p - denom * gamma2 ;
 }
 
 // Returns the derivative of idealHydroCellIFunction with respect to the energy
 // density e. As in idealHydroCellIFunction, the pressure, beta, and cs2 are
 // modified.
 double idealHydroCellIFunctionDerivative(const double &e, /* out */VischydroNode &n, const EOS &eos) { 
-  double rhob = 0.;
-  n.e = e ;
-  n.cs2 = eos.get_cs2(e, rhob);
-  n.p = eos.get_pressure(e, rhob);
-  n.beta = 1./eos.get_temperature(e, rhob);
-    double vx = n.M[0]/(n.E + n.p) ;
-    double vy = n.M[1]/(n.E + n.p) ;
+    double rhob = 0.;
+    double min_e = 1e-8;
+    n.e = (e < min_e) ? min_e : e;
+    n.cs2 = eos.get_cs2(n.e, rhob);
+    n.p = eos.get_pressure(n.e, rhob);
+    n.beta = 1./eos.get_temperature(n.e, rhob);
+    double denom = n.E + n.p;
+    if (denom < min_e) denom = min_e;
+    double vx = n.M[0]/denom;
+    double vy = n.M[1]/denom;
+    double gamma2 = 1.0 - vx*vx - vy*vy;
+    if (gamma2 <= 0.0) {
+            vx = 0.0;
+            vy = 0.0;
+            gamma2 = 1.0;
+    }
     for (int i = 0; i < VischydroNode::dim; ++i) {
-        n.u[i] = (i == 0 ? vx : vy) / sqrt(1. - vx * vx - vy * vy);
+            n.u[i] = (i == 0 ? vx : vy) / sqrt(gamma2);
     }
     double Mnrm = sqrt(n.M[0]*n.M[0] + n.M[1]*n.M[1]);
-  return 1. - n.cs2*pow(Mnrm/(n.E + n.p),2);
+    return 1. - n.cs2*pow(Mnrm/denom,2);
 }
 
 // 2D Newton solver for e, given E, Mx, My, ux, uy
@@ -157,6 +174,8 @@ double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n, const 
         double df = idealHydroCellIFunctionDerivative(e, n, eos);
         if (std::abs(df) < 1e-14) {
             std::cout << "idealHydroCell: Derivative too small, aborting" << std::endl;
+            n.print("Newton diagnostic: Derivative too small");
+            std::cout << "Iteration: " << it << " e: " << e << " f: " << f << " df: " << df << std::endl;
             std::abort();
         }
         e -= f / df;
@@ -166,6 +185,8 @@ double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n, const 
     }
     if (it == maxit) {
         std::cout << "idealHydroCell: Newton's method did not converge" << std::endl;
+        n.print("Newton diagnostic: Did not converge");
+        std::cout << "Final iteration: " << it << " e: " << e << " f: " << f << std::endl;
         std::abort();
     }
     return e;
@@ -260,10 +281,10 @@ public:
     // constructor creates the grid/domain, solution vector,
     // time stepper, and an input-output viewer HDF5.
     Vischydro (const Json::Value &in, const EOS &eosin) : inputs(in), eos(eosin) {
-        const int stencil_width = 2;
+                const int stencil_width = 2;
         DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC, DMDA_STENCIL_BOX,
-                    get_inputs("NX").asInt(), get_inputs("NY").asInt(),
-                    PETSC_DECIDE, PETSC_DECIDE, VischydroNode::NDOF, stencil_width, NULL, NULL, &domain);
+            get_inputs("grid")["NX"].asInt(), get_inputs("grid")["NY"].asInt(),
+            PETSC_DECIDE, PETSC_DECIDE, VischydroNode::NDOF, stencil_width, NULL, NULL, &domain);
         DMSetFromOptions(domain);
         DMSetUp(domain);
         
@@ -272,12 +293,12 @@ public:
         VecDuplicate(solution_local, &solution_last);
 
         // Construct the grid spacing
-        xmin = get_inputs("xmin").asDouble();
-        xmax = get_inputs("xmax").asDouble();
-        ymin = get_inputs("ymin").asDouble();
-        ymax = get_inputs("ymax").asDouble();
-        dx = (xmax - xmin) / (double)(get_inputs("NX").asInt() - 1);
-        dy = (ymax - ymin) / (double)(get_inputs("NY").asInt() - 1);
+        xmin = get_inputs("grid")["xmin"].asDouble();
+        xmax = get_inputs("grid")["xmax"].asDouble();
+        ymin = get_inputs("grid")["ymin"].asDouble();
+        ymax = get_inputs("grid")["ymax"].asDouble();
+        dx = (xmax - xmin) / (double)(get_inputs("grid")["NX"].asInt() - 1);
+        dy = (ymax - ymin) / (double)(get_inputs("grid")["NY"].asInt() - 1);
         std::cout << "xmin: " << xmin << std::endl;
         std::cout << "xmax: " << xmax << std::endl;
         std::cout << "dx: " << dx << std::endl;
@@ -286,10 +307,10 @@ public:
         std::cout << "dy: " << dy << std::endl;
 
         // Construct the time grid
-        double initial_time = get_inputs("initial_time").asDouble();
-        double cfl = get_inputs("cfl_max").asDouble();
+        double initial_time = get_inputs("time")["initial_time"].asDouble();
+        double cfl = get_inputs("time")["cfl_max"].asDouble();
         double dt = cfl * std::min(dx, dy);
-        double final_time = get_inputs("final_time").asDouble();
+        double final_time = get_inputs("time")["final_time"].asDouble();
         std::cout << "initial_time: " << initial_time << std::endl;
         std::cout << "dt: " << dt << std::endl;
         std::cout << "final_time: " << final_time << std::endl;
@@ -319,7 +340,7 @@ public:
         SNESSetFromOptions(snes);
         
         // Create the HDF5 viewer (for output only)
-        std::string iofilename = get_inputs("iofilename").asString();
+        std::string iofilename = get_inputs("time")["iofilename"].asString();
         PetscViewerHDF5Open(PETSC_COMM_WORLD, iofilename.c_str(), FILE_MODE_APPEND, &H5viewer);
         PetscViewerSetFromOptions(H5viewer);
       
@@ -333,11 +354,12 @@ public:
         DMDAVecGetArrayDOF(domain, solution, &asol);
         
         // Parameters for Gaussian
-        double amplitude = 5.0;
-        double sigma = 10.0;
-        double xmid = 0.5 * (xmin + xmax);
-        double ymid = 0.5 * (ymin + ymax);
-        double ux0 = 0.0, uy0 = 0.0;
+        double amplitude = get_inputs("initial_conditions")["amplitude"].asDouble();
+        double sigma = get_inputs("initial_conditions")["sigma"].asDouble();
+        double xmid = get_inputs("initial_conditions")["xmid"].asDouble();
+        double ymid = get_inputs("initial_conditions")["ymid"].asDouble();
+        double ux0 = get_inputs("initial_conditions")["ux0"].asDouble();
+        double uy0 = get_inputs("initial_conditions")["uy0"].asDouble();
         for (int j = ys; j < ys + ym; j++) {
             for (int i = xs; i < xs + xm; i++) {
                 (*asol[j][i]).e = amplitude * std::exp(- ((xmin + i * dx - xmid)*(xmin + i * dx - xmid) + (ymin + j * dy - ymid)*(ymin + j * dy - ymid)) / (2.0 * sigma * sigma));
@@ -376,11 +398,11 @@ public:
 PetscErrorCode idealRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
     const Vischydro &run = *(Vischydro *)ctx;
 
+    // Get pointer to local array
     PetscCall(DMGlobalToLocal(run.domain, U, INSERT_VALUES, run.solution_local));
     VischydroNode ***asol;
     PetscCall(DMDAVecGetArrayDOF(run.domain, run.solution_local, &asol));
     VischydroNode ***asol_last;
-    
     PetscCall(DMDAVecGetArrayDOF(run.domain, run.solution_last, &asol_last));
     
     VecZeroEntries(G);
@@ -392,7 +414,7 @@ PetscErrorCode idealRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
     PetscCall(DMDAGetCorners(run.domain, &xs, &ys, 0, &xm, &ym, 0));
     limitter slope(limitter::kCenteredMinMod);
 
-    // Newton inversion loop
+    // Update value of energy density at each grid point given E, Mx, My
     for (int j = ys-2; j < ys + ym +2; j++) {
         for (int i = xs-2; i < xs + xm +2; i++) {
             if (j < ys || j >= ys + ym || i < xs || i >= xs + xm) continue;
@@ -450,8 +472,24 @@ PetscErrorCode idealRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
             auto FRy = nR_y.fluxY();
             auto qLy = nL_y.charge();
             auto qRy = nR_y.charge();
-            double apx = 1.0, amx = 1.0;
-            double apy = 1.0, amy = 1.0;
+
+            // Compute wave speeds in x-direction
+            auto [lambdap_x, lambdam_x] = propagationVelocity(
+                nL_x.cs2, nL_x.u[0], nL_x.u0(),
+                nR_x.cs2, nR_x.u[0], nR_x.u0()
+            );
+            double epsilon = 1.e-8;
+            double apx = std::max(epsilon, lambdap_x);
+            double amx = std::max(epsilon, -lambdam_x);
+
+            // Compute wave speeds in y-direction
+            auto [lambdap_y, lambdam_y] = propagationVelocity(
+                nL_y.cs2, nL_y.u[1], nL_y.u0(),
+                nR_y.cs2, nR_y.u[1], nR_y.u0()
+            );
+            double apy = std::max(epsilon, lambdap_y);
+            double amy = std::max(epsilon, -lambdam_y);
+
             std::array<double, VischydroNode::Ncharge> Fx{};
             std::array<double, VischydroNode::Ncharge> Fy{};
             for (int k = 0; k < VischydroNode::Ncharge; k++) {
@@ -506,7 +544,7 @@ PetscErrorCode PostStepInversion(TS ts) {
 PetscErrorCode VischydroMonitor(TS ts, PetscInt step, PetscReal time, Vec u, void *mctx) {
     Vischydro *run = nullptr ;
     TSGetApplicationContext(ts, &run);
-    int nprint = run->get_inputs("steps_per_print").asInt();
+    int nprint = run->get_inputs("time")["steps_per_print"].asInt();
     if (step % nprint == 0 ) {
         PetscPrintf(PETSC_COMM_WORLD, "Time, Step: %f %d \n", time, step);
         PetscObjectSetName((PetscObject)run->solution, "solution");
