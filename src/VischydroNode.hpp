@@ -1,11 +1,12 @@
 #ifndef VISCHYDRONODE_HPP
 #define VISCHYDRONODE_HPP
 
-#include "EOS.hpp"
+#include "DFHydroEOS.hpp"
 #include <array>
 #include <iostream>
 #include <petsc.h>
 
+namespace DFHydro {
 struct VischydroNode {
   static const int dim = 2;
   static const int Ncharge = 3;
@@ -75,5 +76,11 @@ void FillVischydroNode(VischydroNode &node, const EOS &eos) ;
 double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n,
                            const EOS &eos) ;
 
+// Returns the value of knn, knx, kxx for the given VischydroNode n and EOS eos
+void fillnode_kappa(const VischydroNode &n, const EOS &eos, double &knn, std::array<double, 4> &knx, std::array<double, 16> &kxx); 
 
+// Returns the inverse susceptibility matrix chiiinv for the given VischydroNode n and EOS eos
+void fillnode_chiinv(const VischydroNode &n, const EOS &eos, std::array<double, 9> &chiiinv);
+
+} // namespace DFHydro
 #endif

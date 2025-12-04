@@ -1,5 +1,7 @@
 #include "VischydroNode.hpp"
 
+namespace DFHydro {
+
 // FillVischydroNode is a function that fills the VischydroNode with the values
 // of the EOS, starting from the energy density e and the velocity u[]. The
 // values of E and M are calculated from the EOS.
@@ -77,7 +79,7 @@ double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n,
     e -= f / df;
     f = idealHydroCellIFunction(e, n, eos);
     it++;
-  }   
+  }
   if (it == maxit) {
     std::cout << "idealHydroCell: Newton's method did not converge"
               << std::endl;
@@ -86,3 +88,63 @@ double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n,
   return e;
 }
 
+// // Returns the inverse susceptibility matrix chiiinv for the given VischydroNode
+// // n and EOS eos
+// void fillnode_chiinv(const VischydroNode &n, const EOS &eos,
+//                      std::array<double, 9> &chiiinv_d) {
+//   double rhob = 0.;
+//   double cs2 = eos.get_cs2(e, rhob);
+
+//   double w = n.w();
+//   double beta = n.get_beta();
+//   double vx = n.vx();
+//   double vy = n.vy();
+//   double v2 = vx * vx + vy * vy;
+
+//   MDSpan<double, 3, 3> chiinv(chiinv_d.data());
+//   chiinv(0,0) = (v2 + cs2 + 2 * cs2 * v2) / (1 - v2 * cs2) * u0 * beta / w;
+//   chiinv(0,1) = -vx * (1 + 2 * cs2 + cs2 * v2) / (1 - v2 * cs2) * u0 * beta / w;
+//   chiinv(0,2) = -vy * (1 + 2 * cs2 + cs2 * v2) / (1 - v2 * cs2) * u0 * beta / w;
+
+//   chiinv(1,0) = chiinv(0,1);
+//   chiinv(1,1) = (1 - v2 + ((1 - cs2 * (-4 + v2)) * vx * vx) /
+//               ((-1 + v2) * (-1 + cs2 * v2))) * u0 * beta / w;
+
+//   chiinv(1,2) = ((1 - cs2 * (-4 + v2)) * vx * vy) /
+//               ((-1 + v2) * (-1 + cs2 * v2)) * u0 * beta / w;
+
+//   chiinv(2,0) = chiinv(0,2);
+//   chiinv(2,1) = chiinv(1,2);
+//   chiinv(2,2) = (1 - v2 + ((1 - cs2 * (-4 + v2)) * vy * vy) /
+//               ((-1 + v2) * (-1 + cs2 * v2))) * u0 * beta / w;
+
+// }
+
+
+// inline double Power(double base, int exp) {
+//   return std::pow(base, exp);
+// }
+
+// // Returns the value of knn, knx, kxx for the given VischydroNode n and EOS eos
+// void fillnode_kappa(const VischydroNode &n, const EOS &eos, double &knn, std::array<double, 4> &knx_d, std::array<double, 16> &kxx_d) 
+// {
+//   MDSpan<double, 2, 2> knx(knx_d.data());
+//   MDSpan<double, 2, 2, 2, 2> kxx(kxx_d.data());
+//   double rhob = 0.;
+//   double cs2 = eos.get_cs2(n.e, rhob);
+//   double w = n.w();
+//   double beta = n.get_beta();
+//   double vx = n.vx();
+//   double vy = n.vy();
+//   double v2 = vx * vx + vy * vy;
+//   double u0 = n.u0(); 
+//   double etabys = eos.get_eta_by_s(n.e, rhob);
+//   double zetabys = eos.get_zeta_by_s(n.e, rhob);
+//}
+
+
+
+
+
+
+} // namespace DFHydro

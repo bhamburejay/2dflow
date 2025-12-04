@@ -3,7 +3,6 @@
 
 #include "EOS.hpp"
 #include "VischydroNode.hpp"
-#include "json/json.h"
 #include <petsc.h>
 #include <petscdm.h>
 #include <petscdmda.h>
