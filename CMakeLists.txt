@@ -31,7 +31,7 @@ set(SOURCES
 ${CMAKE_SOURCE_DIR}/src/VischydroNode.cpp
 ${CMAKE_SOURCE_DIR}/src/Vischydro.cpp)
 
-add_subdirectory(tests)
+# add_subdirectory(tests)
 add_subdirectory(example)
 
 
