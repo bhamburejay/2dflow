@@ -56,7 +56,7 @@ public:
   double get_ymax() const { return ymax; }
   int get_nx() const { return nx; }
   int get_ny() const { return ny; }
-  bool is_bjorken_expansion() const { false; }
+  bool is_bjorken_expansion() const { return false; }
   double get_cfl() const { return cfl; }
   double get_default_time_step() const { return cfl * std::min(dx, dy); }
 

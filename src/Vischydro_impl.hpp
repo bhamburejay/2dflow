@@ -1,6 +1,7 @@
 #ifndef Vischydro_impl_hpp
 #define Vischydro_impl_hpp
 
+#include <numeric>
 namespace DFHydro {
 class limitter {
 

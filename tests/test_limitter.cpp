@@ -8,6 +8,9 @@ using namespace DFHydro;
 
 int main(int argc, char **argv){
 
+    // Simple Gaussian test function for using testing the limitter. 
+    // The code writes out the function and its slope to a file, "test_limitter_slope.dat"
+
     int nx = 200;
     double xmin = -2;
     double xmax = 2;
@@ -22,7 +25,7 @@ int main(int argc, char **argv){
 
     // Interpolate the function with the limitter and write out the results
     limitter slope;
-    std::ofstream ofs("test_slope.dat");
+    std::ofstream ofs("test_limitter_slope.dat");
     for (ix = 0; ix < nx; ix++) {
         double xm = (ix == 0) ? f[ix] : f[ix - 1];
         double xp = (ix == nx - 1) ? f[ix] : f[ix + 1];
