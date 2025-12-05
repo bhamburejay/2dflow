@@ -80,6 +80,5 @@ private:
 };
 } // namespace DFHydro
 
-PetscErrorCode PostStepInversion(TS ts) ;
 
 #endif

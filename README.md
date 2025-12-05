@@ -1,4 +1,4 @@
-# Compiling the source code requires the PETSc library with HDF5 support. 
+# Compiling the source code full requires the PETSc library with HDF5 support. 
 # If this is installed with package config then the usual cmake steps should work
 
 Compilation:
@@ -12,7 +12,11 @@ cd ./build
 
 3. Type 
 
-cmake ..
+cmake .. 
+
+If you wish HDF5 support then 
+
+cmake ../ -DPETSC_HAS_HDF5=1
 
 This creates the tools to build the source code,  in particular it constructs the makefile
 

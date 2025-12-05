@@ -1,12 +1,15 @@
 #include <nlohmann/json.hpp>
-#include <petscviewerhdf5.h>
 #include "Vischydro.hpp"
 #include "DFHydroEOS.hpp"
 #include "Vischydro_impl.hpp"
+#ifdef PETSC_HAVE_HDF5
+#include <petscviewerhdf5.h>
+#endif
 
 using namespace DFHydro;
 
 void Vischydro::load_initial_conditions(const std::string filename) {
+#ifdef PETSC_HAVE_HDF5
   PetscViewer viewer;
   PetscViewerHDF5Open(PETSC_COMM_WORLD, filename.c_str(), FILE_MODE_READ,
                       &viewer);
@@ -30,11 +33,15 @@ void Vischydro::load_initial_conditions(const std::string filename) {
 
   // Fill in the boundary cells and the local last solution based on the initial conditions.
   PetscCallVoid(DMGlobalToLocal(domain, solution, INSERT_VALUES, local_solution_last));
+#else
+  PetscPrintf(PETSC_COMM_WORLD, "HDF5 support not available. Cannot load initial conditions from file.\n");
+#endif
 }
 
 // Save the current grid to a file using HDF5. The filename is optional and
 // defaults to output.h5
 void Vischydro::save(const std::string filename) {
+#ifdef PETSC_HAVE_HDF5
   PetscViewer viewer;
   PetscViewerHDF5Open(PETSC_COMM_WORLD, filename.c_str(), FILE_MODE_WRITE,
                       &viewer);
@@ -43,8 +50,10 @@ void Vischydro::save(const std::string filename) {
   PetscObjectSetName((PetscObject)coordinates, "coordinates");
   VecView(coordinates, viewer);
   PetscViewerDestroy(&viewer);
+#else
+  PetscPrintf(PETSC_COMM_WORLD, "HDF5 support not available. Cannot save to file.\n");
+#endif
 }
-
 void Vischydro::solve(double t1, double t2, double dt) {
   PetscCallVoid(TSSetTime(stepper, t1));
   PetscCallVoid(TSSetMaxTime(stepper, t2));  
