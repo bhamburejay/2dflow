@@ -29,4 +29,6 @@ If there was a problem with compilation step then the troubleshoot directory has
 Example
 =======
 
+After this you can look at the source in the example directory, which shows how the code is meant to be used
+
 

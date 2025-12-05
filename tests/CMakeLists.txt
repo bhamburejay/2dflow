@@ -12,6 +12,3 @@ target_link_libraries(test_limitter.exe PkgConfig::PETSC ${HDF5_LIBRARIES})
 add_executable(test_eos.exe ./test_eos.cpp ${SOURCES})
 target_link_libraries(test_eos.exe PkgConfig::PETSC ${HDF5_LIBRARIES})
 
-add_executable(VischydroMain.exe ./VischydroMain.cpp ${SOURCES})
-target_link_libraries(VischydroMain.exe PkgConfig::PETSC ${HDF5_LIBRARIES})
-

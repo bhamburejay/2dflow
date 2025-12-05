@@ -1,0 +1,24 @@
+set pm3d map 
+set size ratio -1
+set multiplot layout 2,2 title "Simple Hydrodynamics Energy Density"
+
+# Plots the enenergy density at various times
+
+#set key noautotitle
+set xlabel "x (fm)"
+set ylabel "y (fm)"
+set zlabel "Energy Density (1/fm^4)"
+
+# c++ is backwards y x e  that is why using 2:1:3
+# t=1.0 fm/c
+set title "t=1.0 fm/c"
+splot "simple_output.txt" using 2:1:3 index 0  ti "t =1 "
+# t=4.0 fm/c
+set title "t=4.0 fm/c"
+splot "simple_output.txt" using 2:1:3 index 3  ti "t=4"
+# t=7.0 fm/c
+set title "t=7.0 fm/c"
+splot "simple_output.txt" using 2:1:3 index 6  ti "t=7"
+# t=10.0 fm/c
+set title "t=10.0 fm/c"
+splot "simple_output.txt" using 2:1:3 index 9  ti "t=10"

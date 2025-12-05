@@ -56,9 +56,11 @@ public:
   double get_ymax() const { return ymax; }
   int get_nx() const { return nx; }
   int get_ny() const { return ny; }
-  bool is_bjorken_expansion() const { return false; }
+  bool is_bjorken_expansion() const { return is_bjorken; }
   double get_cfl() const { return cfl; }
   double get_default_time_step() const { return cfl * std::min(dx, dy); }
+
+  void solve(double t1, double t2, double dt);
 
 public: 
   Vec local_solution;
@@ -74,6 +76,7 @@ private:
   double ymin;
   double ymax;
   double cfl;
+  bool is_bjorken;  
 };
 } // namespace DFHydro
 

@@ -45,6 +45,13 @@ void Vischydro::save(const std::string filename) {
   PetscViewerDestroy(&viewer);
 }
 
+void Vischydro::solve(double t1, double t2, double dt) {
+  PetscCallVoid(TSSetTime(stepper, t1));
+  PetscCallVoid(TSSetMaxTime(stepper, t2));  
+  PetscCallVoid(TSSetTimeStep(stepper, dt));
+  PetscCallVoid(TSSolve(stepper, solution));
+}
+
 // Returns the largest and smalllest (most-negative) propagation velocities for
 // a given speed of sound cs2, velocity ux, and Lorentz factor u0.
 std::tuple<double, double> idealPropagationVelocity(const double &cs2, const double &ux, const double &u0)
@@ -320,7 +327,10 @@ Vischydro::Vischydro(nlohmann::json &config, const EOS *eosin)
     xmax = config.at("xmax").get<double>();
     ymin = config.at("ymin").get<double>();        
     ymax = config.at("ymax").get<double>();
-    cfl = config.at("cfl_max").get<double>();
+    
+    // Default values for optional parameters 
+    cfl = config.value("cfl_max", 0.4) ;
+    is_bjorken = config.value("is_bjorken", true) ;
   } catch (nlohmann::json::exception &e) {
     std::cerr << "Error parsing configuration JSON: " << e.what() << std::endl;
     std::abort();
@@ -329,8 +339,8 @@ Vischydro::Vischydro(nlohmann::json &config, const EOS *eosin)
   double Lx = xmax - xmin;
   double Ly = ymax - ymin;
 
-  dx = Lx / (nx - 1);
-  dy = Ly / (ny - 1);
+  dx = Lx / nx ;
+  dy = Ly / ny ;
 
   const int stencil_width = 2;
   // 2d grid with periodic boundary conditions
@@ -352,6 +362,13 @@ Vischydro::Vischydro(nlohmann::json &config, const EOS *eosin)
   TSSetApplicationContext(stepper, this);
   TSSetDM(stepper, domain);
   TSSetTimeStep(stepper, get_default_time_step());
+
+  // Simplest possible time step adaptivity: no adaptivity
+  TSAdapt adapt;
+  TSGetAdapt(stepper, &adapt);
+  TSAdaptSetType(adapt, TSADAPTNONE);
+  TSSetExactFinalTime(stepper, TS_EXACTFINALTIME_STEPOVER);
+
   TSSetType(stepper, TSSSP);
   TSSetSolution(stepper, solution);
   TSSetRHSFunction(stepper, NULL, EulerRHSFunction, this);
