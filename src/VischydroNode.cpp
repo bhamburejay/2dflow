@@ -1,11 +1,12 @@
 #include "VischydroNode.hpp"
+#include "DFHydroMDSpan.hpp"
 
 namespace DFHydro {
 
 // FillVischydroNode is a function that fills the VischydroNode with the values
 // of the EOS, starting from the energy density e and the velocity u[]. The
 // values of E and M are calculated from the EOS.
-void FillVischydroNode(VischydroNode &node, const EOS &eos) {
+void vhnode_fill(VischydroNode &node, const EOS &eos) {
 
   double rhob = 0.;
   double e = node.e;
@@ -17,6 +18,12 @@ void FillVischydroNode(VischydroNode &node, const EOS &eos) {
   for (int i = 0; i < VischydroNode::dim; i++) {
     node.M[i] = (e + node.p) * u0 * node.u[i];
   }
+}
+void vhnode_fill(VischydroNode &node, const double &e, const double &ux, const double &uy, const EOS &eos) {
+  node.e = e;
+  node.u[0] = ux;
+  node.u[1] = uy;
+  vhnode_fill(node, eos);
 }
 //
 // Returns the function which should be zero if the energy density and velocity
@@ -62,7 +69,7 @@ double idealHydroCellIFunctionDerivative(const double &e,
 // method. The starting value for the Newton iteration is ein. The final energy
 // density is returned, and the pressure, beta, and cs2 are modified, and the
 // node is filled with the values of the EOS. However, E and M are not modified.
-double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n,
+double vhnode_findstate(const double &ein, /* out */ VischydroNode &n,
                            const EOS &eos) {
   double abstol = 1.e-15;
   double reltol = 1.e-8;
@@ -88,63 +95,77 @@ double idealHydroCellSolve(const double &ein, /* out */ VischydroNode &n,
   return e;
 }
 
-// // Returns the inverse susceptibility matrix chiiinv for the given VischydroNode
-// // n and EOS eos
-// void fillnode_chiinv(const VischydroNode &n, const EOS &eos,
-//                      std::array<double, 9> &chiiinv_d) {
-//   double rhob = 0.;
-//   double cs2 = eos.get_cs2(e, rhob);
+// Returns the inverse susceptibility matrix chiiinv for the given VischydroNode
+// n and EOS eos
+void vhnode_chiinv(const VischydroNode &n, const EOS &eos,
+                     std::array<double, 9> &chiinv_d) {
+  double rhob = 0.;
+  double e = n.e;
+  double u0 = n.u0();
+  double cs2 = n.get_cs2();
 
-//   double w = n.w();
-//   double beta = n.get_beta();
-//   double vx = n.vx();
-//   double vy = n.vy();
-//   double v2 = vx * vx + vy * vy;
+  double w = n.w();
+  double beta = n.get_beta();
+  double vx = n.vx();
+  double vy = n.vy();
+  double v2 = vx * vx + vy * vy;
 
-//   MDSpan<double, 3, 3> chiinv(chiinv_d.data());
-//   chiinv(0,0) = (v2 + cs2 + 2 * cs2 * v2) / (1 - v2 * cs2) * u0 * beta / w;
-//   chiinv(0,1) = -vx * (1 + 2 * cs2 + cs2 * v2) / (1 - v2 * cs2) * u0 * beta / w;
-//   chiinv(0,2) = -vy * (1 + 2 * cs2 + cs2 * v2) / (1 - v2 * cs2) * u0 * beta / w;
+  MDSpan<double, 3, 3> chiinv(chiinv_d.data());
+  chiinv(0, 0) = (v2 + cs2 + 2 * cs2 * v2) / (1 - v2 * cs2) * u0 * beta / w;
+  chiinv(0, 1) =
+      -vx * (1 + 2 * cs2 + cs2 * v2) / (1 - v2 * cs2) * u0 * beta / w;
+  chiinv(0, 2) =
+      -vy * (1 + 2 * cs2 + cs2 * v2) / (1 - v2 * cs2) * u0 * beta / w;
 
-//   chiinv(1,0) = chiinv(0,1);
-//   chiinv(1,1) = (1 - v2 + ((1 - cs2 * (-4 + v2)) * vx * vx) /
-//               ((-1 + v2) * (-1 + cs2 * v2))) * u0 * beta / w;
+  chiinv(1, 0) = chiinv(0, 1);
+  chiinv(1, 1) =
+      (1 - v2 + ((-1 + cs2 * (-4 + v2)) * vx * vx) / (-1 + cs2 * v2)) * beta *
+      u0 / w;
+  chiinv(1, 2) =
+      ((-1 + cs2 * (-4 + v2)) * vx * vy) / (-1 + cs2 * v2) * beta *
+      u0 / w;
 
-//   chiinv(1,2) = ((1 - cs2 * (-4 + v2)) * vx * vy) /
-//               ((-1 + v2) * (-1 + cs2 * v2)) * u0 * beta / w;
+  chiinv(2, 0) = chiinv(0, 2);
+  chiinv(2, 1) = chiinv(1, 2);
+  chiinv(2, 2) =
+      (1 - v2 + ((-1 + cs2 * (-4 + v2)) * vy * vy) / (-1 + cs2 * v2)) * beta *
+      u0 / w;
+}
 
-//   chiinv(2,0) = chiinv(0,2);
-//   chiinv(2,1) = chiinv(1,2);
-//   chiinv(2,2) = (1 - v2 + ((1 - cs2 * (-4 + v2)) * vy * vy) /
-//               ((-1 + v2) * (-1 + cs2 * v2))) * u0 * beta / w;
+inline double Power(double base, int exp) {
+  return std::pow(base, exp);
+}
 
-// }
+// Returns the value of knn, knx, kxx for the given VischydroNode n and EOS
+void vhnode_kappa(const VischydroNode &n, const EOS &eos, double &knn,
+std::array<double, 4> &knx, std::array<double, 16> &kxx) {
+  double cs2 = n.get_cs2();
+  double w = n.w();
+  double beta = n.get_beta();
+  double vx = n.vx();
+  double vy = n.vy();
+  double v2 = vx * vx + vy * vy;
+  double u0 = n.u0();
+  double rhob = 0.;
+  double T = 1. / beta;
+  double s = n.s();
+  double Teta = T*s*eos.get_eta_by_s(n.e, rhob)/pow(1-cs2*v2, 2);
+  double Tzeta = T*s*eos.get_zeta_by_s(n.e, rhob)/pow(1-cs2*v2, 2);
 
+  double knn_shear, knn_bulk;
+  std::array<double, 4> knx_shear, knx_bulk;
+  std::array<double, 16> kxx_shear, kxx_bulk;
 
-// inline double Power(double base, int exp) {
-//   return std::pow(base, exp);
-// }
+#include "VischydroNode_inc.hpp"
 
-// // Returns the value of knn, knx, kxx for the given VischydroNode n and EOS eos
-// void fillnode_kappa(const VischydroNode &n, const EOS &eos, double &knn, std::array<double, 4> &knx_d, std::array<double, 16> &kxx_d) 
-// {
-//   MDSpan<double, 2, 2> knx(knx_d.data());
-//   MDSpan<double, 2, 2, 2, 2> kxx(kxx_d.data());
-//   double rhob = 0.;
-//   double cs2 = eos.get_cs2(n.e, rhob);
-//   double w = n.w();
-//   double beta = n.get_beta();
-//   double vx = n.vx();
-//   double vy = n.vy();
-//   double v2 = vx * vx + vy * vy;
-//   double u0 = n.u0(); 
-//   double etabys = eos.get_eta_by_s(n.e, rhob);
-//   double zetabys = eos.get_zeta_by_s(n.e, rhob);
-//}
-
-
-
-
-
+  // Combine shear and bulk contributions
+  knn = knn_shear*Teta + knn_bulk*Tzeta;
+  for (int i = 0; i < 4; i++) {
+    knx[i] = knx_shear[i]*Teta + knx_bulk[i]*Tzeta;
+  }
+  for (int i = 0; i < 16; i++) {
+    kxx[i] = kxx_shear[i]*Teta + kxx_bulk[i]*Tzeta;
+  }
+}
 
 } // namespace DFHydro

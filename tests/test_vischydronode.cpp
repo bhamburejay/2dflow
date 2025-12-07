@@ -20,7 +20,7 @@ void test_idealHydroCellSolve() {
   n.e = e;
   n.u[0] = gamma*vx ;
   n.u[1] = gamma*vy ;
-  FillVischydroNode(n, eos);
+  vhnode_fill(n, eos);
   n.print();
 
   // Print out the member functions of the VischydroNode class
@@ -42,7 +42,7 @@ void test_idealHydroCellSolve() {
   e = 1.1*e ;
   n.u[1] = 1.1 * n.u[1] ;
   n.e = e;
-  idealHydroCellSolve(e, n, eos);
+  vhnode_findstate(e, n, eos);
   n.print();
 }
 int main(int argc, char *argv[])

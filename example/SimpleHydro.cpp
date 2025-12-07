@@ -47,7 +47,7 @@ void simple_initialize(Vischydro &vischydro) {
       asol[j][i].u[1] = 0.0;
       
       // Fill in the rest of the VischydroNode fields based on the EOS
-      FillVischydroNode(asol[j][i], *vischydro.eos);
+      vhnode_fill(asol[j][i], *vischydro.eos);
     }
   }
   // Restore the pointers to the Petsc Vec objects

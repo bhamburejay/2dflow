@@ -25,7 +25,7 @@ void Vischydro::load_initial_conditions(const std::string filename) {
   DMDAGetCorners(domain, &xs, &ys, NULL, &xm, &ym, NULL);
   for (PetscInt j = ys; j < ys + ym; j++) {
     for (PetscInt i = xs; i < xs + xm; i++) {
-      FillVischydroNode(asol[j][i], *eos);
+      vhnode_fill(asol[j][i], *eos);
     }
   }
   // Return the pointer to the local array back to the memory space
@@ -130,7 +130,7 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   for (int j = jys; j < jys + jym; j++) {
     // Solve for the internal state, using the energy density from last step
     for (int i = ixs - 2; i < ixs + ixm + 2; i++) {
-      idealHydroCellSolve(asol_last[j][i].e, asol[j][i], eos);
+      vhnode_findstate(asol_last[j][i].e, asol[j][i], eos);
       asol_last[j][i] = asol[j][i];
     }
 
@@ -147,7 +147,7 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
         nL.e = n.e + 0.5 * slope(nm.e, n.e, np.e);
         nL.u[0] = n.u[0] + 0.5 * slope(nm.u[0], n.u[0], np.u[0]);
         nL.u[1] = n.u[1] + 0.5 * slope(nm.u[1], n.u[1], np.u[1]);
-        FillVischydroNode(nL, eos);
+        vhnode_fill(nL, eos);
       }
 
       // extrapolate i to i-1/2
@@ -158,7 +158,7 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
         nR.e = n.e - 0.5 * slope(nm.e, n.e, np.e);
         nR.u[0] = n.u[0] - 0.5 * slope(nm.u[0], n.u[0], np.u[0]);
         nR.u[1] = n.u[1] - 0.5 * slope(nm.u[1], n.u[1], np.u[1]);
-        FillVischydroNode(nR, eos);
+        vhnode_fill(nR, eos);
       }
   
       // Compute the mean flux
@@ -193,7 +193,7 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   for (int i = ixs; i < ixs + ixm; i++) {
     // Solve for the internal state, using the energy density from last step
     for (int j = jys - 2; j < jys + jym + 2; j++) {
-      idealHydroCellSolve(asol_last[j][i].e, asol[j][i], eos);
+      vhnode_findstate(asol_last[j][i].e, asol[j][i], eos);
       asol_last[j][i] = asol[j][i];
     }
 
@@ -209,7 +209,7 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
         nL.e = n.e + 0.5 * slope(nm.e, n.e, np.e);
         nL.u[0] = n.u[0] + 0.5 * slope(nm.u[0], n.u[0], np.u[0]);
         nL.u[1] = n.u[1] + 0.5 * slope(nm.u[1], n.u[1], np.u[1]);
-        FillVischydroNode(nL, eos);
+        vhnode_fill(nL, eos);
       }
 
       // extrapolate j to j-1/2
@@ -220,7 +220,7 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
         nR.e = n.e - 0.5 * slope(nm.e, n.e, np.e);
         nR.u[0] = n.u[0] - 0.5 * slope(nm.u[0], n.u[0], np.u[0]);
         nR.u[1] = n.u[1] - 0.5 * slope(nm.u[1], n.u[1], np.u[1]);
-        FillVischydroNode(nR, eos);
+        vhnode_fill(nR, eos);
       }
   
       // Compute the mean flux
@@ -292,7 +292,7 @@ PetscErrorCode PostStepInversion(TS ts) {
   DMDAGetCorners(run.domain, &ixs, &jys, NULL, &ixm, &jym, NULL);
   for (int j = jys; j < jys + jym; j++) {
     for (int i = ixs; i < ixs + ixm; i++) {
-      idealHydroCellSolve(au_last[j][i].e, au[j][i], *run.eos);
+      vhnode_findstate(au_last[j][i].e, au[j][i], *run.eos);
       au_last[j][i] = au[j][i];
     }
   }
@@ -315,7 +315,7 @@ PetscErrorCode PostStageInversion(TS ts, PetscReal stagetime, PetscInt stageinde
   DMDAGetCorners(run.domain, &ixs, &jys, NULL, &ixm, &jym, NULL);
   for (int j = jys; j < jys + jym; j++) {
     for (int i = ixs; i < ixs + ixm; i++) {
-      idealHydroCellSolve(au_last[j][i].e, au[j][i], *run.eos);
+      vhnode_findstate(au_last[j][i].e, au[j][i], *run.eos);
       au_last[j][i] = au[j][i];
     }
   }

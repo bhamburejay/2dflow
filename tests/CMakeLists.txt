@@ -6,9 +6,24 @@ target_link_libraries(test_nlohmann_json.exe PkgConfig::PETSC ${HDF5_LIBRARIES})
 add_executable(test_vischydronode.exe ./test_vischydronode.cpp ${SOURCES})
 target_link_libraries(test_vischydronode.exe PkgConfig::PETSC ${HDF5_LIBRARIES})
 
+configure_file(./test_limitter.py ./test_limitter.py)
 add_executable(test_limitter.exe ./test_limitter.cpp ${SOURCES})
 target_link_libraries(test_limitter.exe PkgConfig::PETSC ${HDF5_LIBRARIES})
 
 add_executable(test_eos.exe ./test_eos.cpp ${SOURCES})
 target_link_libraries(test_eos.exe PkgConfig::PETSC ${HDF5_LIBRARIES})
 
+add_executable(test_mdspan.exe ./test_mdspan.cpp ${SOURCES})
+target_link_libraries(test_mdspan.exe PkgConfig::PETSC ${HDF5_LIBRARIES})
+
+add_executable(test_fillnode_chiinv.exe ./test_fillnode_chiinv.cpp ${SOURCES})
+target_link_libraries(test_fillnode_chiinv.exe PkgConfig::PETSC ${HDF5_LIBRARIES})
+
+add_executable(test_fillnode_kappa.exe ./test_fillnode_kappa.cpp ${SOURCES})
+target_link_libraries(test_fillnode_kappa.exe PkgConfig::PETSC ${HDF5_LIBRARIES})
+
+# Add the main executable and necessary scripts
+configure_file(./vischydro.py ./vischydro.py)
+configure_file(./VischydroMainRun.py ./VischydroMainRun.py)
+add_executable(VischydroMain.exe ./VischydroMain.cpp ${SOURCES})
+target_link_libraries(VischydroMain.exe PkgConfig::PETSC ${HDF5_LIBRARIES})
