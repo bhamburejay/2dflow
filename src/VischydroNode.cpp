@@ -30,17 +30,20 @@ void vhnode_fill(VischydroNode &node, const double &e, const double &ux, const d
 // u[] are consistent with E and M[] and the EOS. E and M are not modified in
 // this function, but the pressure, beta, and cs2 are.
 double idealHydroCellIFunction(const double &e, /* out */ VischydroNode &n,
-                               const EOS &eos) {
+                               const EOS &eos, bool &ok) {
   double rhob = 0.;
+  
+  // This should completely filll the cell except for 
   n.e = e;
   n.p = eos.get_pressure(e, rhob);
   n.beta = 1. / eos.get_temperature(e, rhob);
   n.cs2 = eos.get_cs2(e, rhob);
+
   double Mnrm = n.Mnrm();
   double v = Mnrm / (n.E + n.p);
   if (v >= 1.) {
-    std::cout << "idealHydroCell: velocity is greater than 1" << std::endl;
-    std::abort();
+    ok = false;
+    return 1.;
   }
   double gamma = 1. / sqrt(1. - v * v);
   for (int i = 0; i < VischydroNode::dim; i++) {
@@ -55,11 +58,6 @@ double idealHydroCellIFunction(const double &e, /* out */ VischydroNode &n,
 double idealHydroCellIFunctionDerivative(const double &e,
                                          /* out */ VischydroNode &n,
                                          const EOS &eos) {
-  double rhob = 0.;
-  n.e = e;
-  n.cs2 = eos.get_cs2(e, rhob);
-  n.p = eos.get_pressure(e, rhob);
-  n.beta = 1. / eos.get_temperature(e, rhob);
   double Mnrm = n.Mnrm();
   return 1. - n.cs2 * pow(Mnrm / (n.E + n.p), 2);
 }
@@ -69,13 +67,19 @@ double idealHydroCellIFunctionDerivative(const double &e,
 // method. The starting value for the Newton iteration is ein. The final energy
 // density is returned, and the pressure, beta, and cs2 are modified, and the
 // node is filled with the values of the EOS. However, E and M are not modified.
-double vhnode_findstate(const double &ein, /* out */ VischydroNode &n,
+bool vhnode_findstate(const double &ein, /* out */ VischydroNode &n,
                            const EOS &eos) {
   double abstol = 1.e-15;
   double reltol = 1.e-8;
   double e = ein;
-  double f = idealHydroCellIFunction(e, n, eos);
-  double v = n.Mnrm() / (n.E + n.p);
+  double rhob = 0.;
+
+  bool ok = true ;
+  double f = idealHydroCellIFunction(e, n, eos, ok);
+  if (!ok)  {
+    return false;
+  }
+
   int it = 0;
   const int maxit = 100;
   while (it < maxit) {
@@ -84,15 +88,16 @@ double vhnode_findstate(const double &ein, /* out */ VischydroNode &n,
     }
     double df = idealHydroCellIFunctionDerivative(e, n, eos);
     e -= f / df;
-    f = idealHydroCellIFunction(e, n, eos);
+    f = idealHydroCellIFunction(e, n, eos, ok);
+    if (!ok) return false;
     it++;
   }
   if (it == maxit) {
     std::cout << "idealHydroCell: Newton's method did not converge"
               << std::endl;
-    std::abort();
+    return false;
   }
-  return e;
+  return true;
 }
 
 // Returns the inverse susceptibility matrix chiiinv for the given VischydroNode

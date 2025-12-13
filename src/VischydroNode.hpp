@@ -78,10 +78,11 @@ void vhnode_fill(VischydroNode &node, const double &e, const double &ux, const d
 
 // This routine uses the idealHydroCellIFunction and
 // idealHydroCellIFunctionDerivative to find the energy density  with Newton's
-// method. The starting value for the Newton iteration is ein. The final energy
+// method. The starting value for the Newton iteration is ein. 
+// The function returns true if the Newton iteration converged. The final energy
 // density is returned, and the pressure, beta, and cs2 are modified, and the
 // node is filled with the values of the EOS. However, E and M are not modified.
-double vhnode_findstate(const double &ein, /* out */ VischydroNode &n,
+bool vhnode_findstate(const double &ein, /* out */ VischydroNode &n,
                            const EOS &eos) ;
 
 // Returns the value of knn, knx, kxx for the given VischydroNode n and EOS eos

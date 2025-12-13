@@ -29,6 +29,8 @@ public:
     VecDestroy(&local_solution);
     VecDestroy(&solution);
     DMDestroy(&domain);
+    VecDestroy(&Residual);
+    MatDestroy(&Jacobian);
   }
 
   // Save the current grid to a file using HDF5. The filename is optional and
@@ -57,6 +59,7 @@ public:
   int get_nx() const { return nx; }
   int get_ny() const { return ny; }
   bool is_bjorken_expansion() const { return is_bjorken; }
+  bool get_highest_order_term_only() const { return bool(highest_order_term_only); }
   double get_cfl() const { return cfl; }
   double get_default_time_step() const { return cfl * std::min(dx, dy); }
 
@@ -67,6 +70,7 @@ public:
   Vec local_solution_last;
 
 private:
+  nlohmann::json options ;
   int nx;
   int ny;
   double dx;
@@ -77,6 +81,10 @@ private:
   double ymax;
   double cfl;
   bool is_bjorken;  
+  bool highest_order_term_only;
+  Vec Residual;
+  Mat Jacobian;
+  PetscErrorCode set_petsc_options();
 };
 } // namespace DFHydro
 
