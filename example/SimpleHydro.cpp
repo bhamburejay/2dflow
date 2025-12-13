@@ -28,7 +28,7 @@ void simple_initialize(Vischydro &vischydro) {
   PetscInt xs, ys, xm, ym;
   DMDAGetCorners(domain, &xs, &ys, NULL, &xm, &ym, NULL);
   double emax = 20.0; // The maximum energy in 1/fm^4
-  double emin = 1.e-5;
+  double emin = 1.e-2;
   double sigma = 2.5; // The width of the Gaussian in fm
   for (PetscInt j = ys; j < ys + ym; j++) {
     for (PetscInt i = xs; i < xs + xm; i++) {
@@ -95,17 +95,19 @@ PetscErrorCode RunCode() {
 
   // You can also read this from a file.
   nlohmann::json input = nlohmann::json::parse(R"({  
-        "nx": 50,
-        "ny": 70, 
-        "ndof": 9,
+        "nx": 120,
+        "ny": 120, 
         "xmin": -20.0,
         "xmax": 20.0,
         "ymin": -15.0,
-        "ymax": 15.0
+        "ymax": 15.0 
   })");
 
   std::ofstream out("simple_output.txt");
-  ViscousQGP eos;
+
+  ViscousQGP eos; // Default parameters have eta/s=0
+  eos.set_eta_by_s(4.0 / (4.0 * M_PI));
+
   Vischydro vischydro(input, &eos);
 
   if (vischydro.is_bjorken_expansion()) { 
@@ -116,19 +118,33 @@ PetscErrorCode RunCode() {
   
   double t_start = 1.0;
   double t_end = 10.0;
-  // Choose a time step based on the CFL condition
-  double dt = std::min(vischydro.get_default_time_step(), 0.05);
   double t = t_start;
   int istep = 0;
 
+  // Choose a time step based on the CFL condition
+  double dt_max = 0.25; ;
+  double dt = std::min(vischydro.get_default_time_step(), dt_max); 
+  
+  // Adjust dt to be a power-of-two subdivision of tprint
+  double tprint = 1.0; 
+  double dt1 = 1. ;
+  int nprint = 1 ;
+  while (dt1 >= dt) {
+    dt1 = 0.5 * dt1 ;
+    nprint *= 2 ;
+  }
+  dt = dt1;
+
+  // See the function defined above
   simple_initialize(vischydro);
+  // Ultrasimple output at initial time, see above
   simple_output(vischydro, out, istep, t);
   while (t < t_end) {
     t += dt;
     std::cout << "Current time: " << t << std::endl;
     vischydro.solve(t, t + dt, dt);
     istep++;
-    if (istep % 20 == 0) {
+    if (istep % nprint == 0) {
       simple_output(vischydro, out, istep, t);
     }
   }

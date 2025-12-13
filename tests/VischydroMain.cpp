@@ -1,7 +1,7 @@
-#include <petscviewerhdf5.h>
 #include "Vischydro.hpp"
 #include <fstream>
 #include <iostream>
+#include <petscviewerhdf5.h>
 
 using namespace DFHydro;
 
@@ -24,10 +24,12 @@ public:
   std::ofstream ascii_file;
 
   GridMonitorContext(nlohmann::json &input, Vischydro *run_in) : run(run_in) {
-    print_frequency = input.at("VischydroMain").at("print_frequency").get<int>();
+    print_frequency =
+        input.at("VischydroMain").at("print_frequency").get<int>();
 
     // Create the HDF5 viewer  run_name + "_grid.h5"
-    std::string run_name = input.at("VischydroMain").at("run_name").get<std::string>();
+    std::string run_name =
+        input.at("VischydroMain").at("run_name").get<std::string>();
     std::string iofilename = run_name + "_grid.h5";
 
     PetscViewerHDF5Open(PETSC_COMM_WORLD, iofilename.c_str(), FILE_MODE_WRITE,
@@ -38,7 +40,11 @@ public:
     PetscViewerHDF5PushTimestepping(H5viewer);
 
     // Create an ascii file
-    ascii_file.open(run_name + "_grid_t.txt");
+    int rank = 0;
+    MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
+    if (rank == 0) {
+      ascii_file.open(run_name + "_grid_t.txt");
+    }
   }
   ~GridMonitorContext() { PetscViewerDestroy(&H5viewer); }
 };
@@ -57,8 +63,13 @@ PetscErrorCode VischydroGridMonitor(TS ts, PetscInt step, PetscReal time, Vec u,
     VecView(u, monitor->H5viewer);
     // Increment the timestep for the hdf5file
     PetscViewerHDF5IncrementTimestep(monitor->H5viewer);
-    monitor->ascii_file << time << " " << step << " "
-                        << step / monitor->print_frequency << std::endl;
+
+    int rank = 0;
+    MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
+    if (rank == 0) {
+      monitor->ascii_file << time << " " << step << " "
+                          << step / monitor->print_frequency << std::endl;
+    }
   }
 
   return 0;
@@ -78,20 +89,26 @@ PetscErrorCode RunCode() {
                 filename);
     return 0;
   }
+  double etabys_in =
+      input.at("VischydroMain").value("eta_by_s", 1. / (4. * M_PI));
+  double zetabys_in = input.at("VischydroMain").value("zeta_by_s", 0.);
 
   // Create the EOS
-  std::unique_ptr<EOS> eos = std::make_unique<ViscousQGP>();
-  
+  std::unique_ptr<EOS> eos =
+      std::make_unique<ViscousQGP>(3., 0, etabys_in, zetabys_in);
+
   // Initialize the EOS
   std::unique_ptr<Vischydro> vischydro =
       std::make_unique<Vischydro>(input.at("Vischydro"), eos.get());
 
-  std::string ic_filename =
-      input.at("VischydroMain").at("initial_conditions_filename").get<std::string>();
+  std::string ic_filename = input.at("VischydroMain")
+                                .at("initial_conditions_filename")
+                                .get<std::string>();
   vischydro->load_initial_conditions(ic_filename);
 
   // File names take the form run_name_initial.h5 and run_name_final.h5
-  std::string run_name = input.at("VischydroMain").at("run_name").get<std::string>();
+  std::string run_name =
+      input.at("VischydroMain").at("run_name").get<std::string>();
 
   vischydro->save(run_name + "_initial.h5");
 
@@ -99,14 +116,18 @@ PetscErrorCode RunCode() {
   GridMonitorContext gctx(input, vischydro.get());
   TSMonitorSet(vischydro->stepper, VischydroGridMonitor, &gctx, NULL);
 
-  
   double t_start = input.at("VischydroMain").at("t_start").get<double>();
   double t_end = input.at("VischydroMain").at("t_end").get<double>();
-  double dt = vischydro->get_default_time_step();
+  double dt_max = input.at("VischydroMain").at("dt_max").get<double>();
+  double dt = std::min(vischydro->get_default_time_step(), dt_max);
 
-  std::cout << "initial_time: " << t_start << std::endl;
-  std::cout << "dt: " << dt << std::endl;
-  std::cout << "final_time: " << t_end << std::endl;
+  int rank;
+  MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
+  if (rank == 0) {
+    std::cout << "initial_time: " << t_start << std::endl;
+    std::cout << "dt: " << dt << std::endl;
+    std::cout << "final_time: " << t_end << std::endl;
+  }
 
   TSSetTime(vischydro->stepper, t_start);
   TSSetTimeStep(vischydro->stepper, dt);
@@ -114,9 +135,27 @@ PetscErrorCode RunCode() {
   TSSetExactFinalTime(vischydro->stepper, TS_EXACTFINALTIME_STEPOVER);
   TSSetFromOptions(vischydro->stepper);
 
+  // Check the -help option to print out the input file structure
+  PetscBool help = PETSC_FALSE;
+  PetscOptionsGetBool(NULL, NULL, "-help", &help, NULL);
+  if (help) {
+    int rank = 0;
+    MPI_Comm_rank(PETSC_COMM_WORLD, &rank);
+    if (rank == 0) {
+      PetscPrintf(PETSC_COMM_WORLD, "This is the VischydroMain executable.\n");
+      std::cout << std::setw(4) << input << std::endl;
+    }
+    return 0;
+  }
+
   TSSolve(vischydro->stepper, vischydro->solution);
 
   // Save the final state
+  if (rank == 0) {
+    double t;
+    TSGetTime(vischydro->stepper, &t);
+    std::cout << "Final output time: " << t << std::endl;
+  }
   vischydro->save(run_name + "_final.h5");
   return 0;
 }
