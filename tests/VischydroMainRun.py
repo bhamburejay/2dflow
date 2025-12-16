@@ -48,8 +48,9 @@ def runbj2d(fourpietabys, gaussian_const, gaussian_amplitude, gaussian_width, tm
     
     if actually_run:
         vischydro.runcode(initialdata, vischydro.input_data, runcommand=runcommand, actually_run = actually_run, petsc_args=petsc_args)
-    plot_contours(vischydro.input_data, name)
-    plt.show()
+    else:
+        plot_contours(vischydro.input_data, name)
+        plt.show()
     
 # Create the initial conditions considered by Pretorious and Pandyas fig 1
 def ic1(input_data, A=0.4, delta=0.1, sigma=4.):
@@ -107,10 +108,22 @@ def example_bj2d(petsc_args='', run=False):
     runbj2d(fourpietabys[0], gaussian_const, gaussian_amplitude, gaussian_width, tau0, tmax, petsc_args=petsc_args, actually_run=run)
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Run example bj2d viscous hydrodynamics simulation and plot results for a simple case.')
-    parser.add_argument('--dont_run', help='Do not run the example_bj2d test, just plot the results from a previous run.', action='store_true')
-    args, unknown = parser.parse_known_args()
+    parser = argparse.ArgumentParser(description="Simple Vischydro BJ2D Example", usage="%(prog)s {run|plot} [options]")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
-    example_bj2d(petsc_args='', run=not args.dont_run)
+    # Sub-command: run  -petsc_args
+    run_parser = subparsers.add_parser("run", help="Run the simulation passing all arguments to run command", add_help=False) 
+
+    # Sub-command: plot
+    plot_parser = subparsers.add_parser("plot", help="Generate visualizations", description="Generate visualizations for the simple bj2d example simulation")
+
+    # Parse and execute
+    args,  unknown  = parser.parse_known_args()
+
+    if (args.command == "run"):
+        example_bj2d(petsc_args=unknown, run=True)
+    elif (args.command == "plot"):
+        example_bj2d(petsc_args=unknown, run=False)
+
 
         
