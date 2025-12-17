@@ -112,15 +112,17 @@ propagationVelocity(const double &cs2L, const double &uxL, const double &u0L,
 }
 
 void findstate_problem(const std::string &context, const int &i, const int &j,
-                       const VischydroNode &n_last, VischydroNode &n, const EOS &eos) {
-  static int count =0;
+                       const VischydroNode &n_last, VischydroNode &n,
+                       const EOS &eos) {
+  static int count = 0;
   std::cout << "findstate_problem in context: " << context << " at (" << j
             << ", " << i << ")" << std::endl;
   std::cout << "Input energy density: " << n_last.e << std::endl;
   n.print("VischydroNode state:");
   count++;
   const int max_errors = 500;
-  std::cout << "Reverting to last known good state. Error count = " << count << " / " << max_errors << std::endl;
+  std::cout << "Reverting to last known good state. Error count = " << count
+            << " / " << max_errors << std::endl;
   n = n_last;
   if (count > max_errors) {
     std::cout << "Too many findstate problems, aborting." << std::endl;
@@ -158,7 +160,8 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
     for (int i = ixs - 2; i < ixs + ixm + 2; i++) {
       bool ok = vhnode_findstate(asol_last[j][i].e, asol[j][i], eos);
       if (!ok) {
-        findstate_problem("EulerRHSFunction_X", i, j, asol_last[j][i], asol[j][i], eos);
+        findstate_problem("EulerRHSFunction_X", i, j, asol_last[j][i],
+                          asol[j][i], eos);
       }
       asol_last[j][i] = asol[j][i];
     }
@@ -225,7 +228,8 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
     for (int j = jys - 2; j < jys + jym + 2; j++) {
       bool ok = vhnode_findstate(asol_last[j][i].e, asol[j][i], eos);
       if (!ok) {
-        findstate_problem("EulerRHSFunction_Y", i, j, asol_last[j][i], asol[j][i], eos);
+        findstate_problem("EulerRHSFunction_Y", i, j, asol_last[j][i],
+                          asol[j][i], eos);
       }
       asol_last[j][i] = asol[j][i];
     }
@@ -334,7 +338,8 @@ PetscErrorCode PostStepInversion(TS ts) {
     for (int i = ixs; i < ixs + ixm; i++) {
       bool ok = vhnode_findstate(au_last[j][i].e, au[j][i], *run.eos);
       if (!ok) {
-        findstate_problem("PostStepInversion", i, j, au_last[j][i], au[j][i], *run.eos);
+        findstate_problem("PostStepInversion", i, j, au_last[j][i], au[j][i],
+                          *run.eos);
       }
       au_last[j][i] = au[j][i];
     }
@@ -363,7 +368,8 @@ PetscErrorCode PostStageInversion(TS ts, PetscReal stagetime,
     for (int i = ixs; i < ixs + ixm; i++) {
       bool ok = vhnode_findstate(au_last[j][i].e, au[j][i], *run.eos);
       if (!ok) {
-        std::string context = "PostStageInversion_" + std::to_string(stageindex);
+        std::string context =
+            "PostStageInversion_" + std::to_string(stageindex);
         findstate_problem(context, i, j, au_last[j][i], au[j][i], *run.eos);
       }
       au_last[j][i] = au[j][i];
@@ -375,49 +381,48 @@ PetscErrorCode PostStageInversion(TS ts, PetscReal stagetime,
 }
 
 void evaluate_vertex_chiinv(const VischydroNode &n00, const VischydroNode &n01,
-                             const VischydroNode &n10, const VischydroNode &n11,
-                             const EOS &eos, std::array<double, 36> &chiinv_d) {
+                            const VischydroNode &n10, const VischydroNode &n11,
+                            const EOS &eos, std::array<double, 36> &chiinv_d) {
   MDSpan<double, 4, 9> chiinv(chiinv_d.data());
   // Create an array of node references for the four surrounding nodes
-  std::array<std::reference_wrapper<const VischydroNode>, 4> nds{n00, n01, n10, n11};
+  std::array<std::reference_wrapper<const VischydroNode>, 4> nds{n00, n01, n10,
+                                                                 n11};
 
-  for (int s = 0 ; s < 4 ; s++)  {
+  for (int s = 0; s < 4; s++) {
     std::array<double, 9> chiinvs{};
     vhnode_chiinv(nds[s], eos, chiinvs);
-    for (int a = 0 ; a < 9 ; a++) {
-      chiinv(s,a) = chiinvs[a];
+    for (int a = 0; a < 9; a++) {
+      chiinv(s, a) = chiinvs[a];
     }
   }
   return;
 }
 
 void evaluate_vertex_k(const VischydroNode &n00, const VischydroNode &n01,
-                             const VischydroNode &n10, const VischydroNode &n11,
-                             const EOS &eos, double &knn,
-                             std::array<double, 4> &knx_d,
-                             std::array<double, 16> &kxx_d) {
+                       const VischydroNode &n10, const VischydroNode &n11,
+                       const EOS &eos, double &knn,
+                       std::array<double, 4> &knx_d,
+                       std::array<double, 16> &kxx_d) {
   // Average state at the vertex
-  VischydroNode nv{}; 
+  VischydroNode nv{};
   nv.E = 0.25 * (n00.E + n01.E + n10.E + n11.E);
   nv.M[0] = 0.25 * (n00.M[0] + n01.M[0] + n10.M[0] + n11.M[0]);
   nv.M[1] = 0.25 * (n00.M[1] + n01.M[1] + n10.M[1] + n11.M[1]);
   double e = 0.25 * (n00.e + n01.e + n10.e + n11.e);
   bool ok = vhnode_findstate(e, nv, eos);
   if (!ok) {
-    nv.e = e; 
+    nv.e = e;
     findstate_problem("evaluate_vertex_k", -1, -1, nv, nv, eos);
   }
   vhnode_kappa(nv, eos, knn, knx_d, kxx_d);
 }
 
-void evaluate_vertex_kderivative(const VischydroNode &n00, const VischydroNode &n01,
-                             const VischydroNode &n10, const VischydroNode &n11,
-                             const EOS &eos, double &knn,
-                             std::array<double, 4> &knx_d,
-                             std::array<double, 16> &kxx_d, 
-                             std::array<double, 3> &knn_deriv_d,
-                             std::array<double, 4*3> &knx_deriv_d, 
-                             std::array<double, 16*3> &kxx_deriv_d) {
+void evaluate_vertex_kderivative(
+    const VischydroNode &n00, const VischydroNode &n01,
+    const VischydroNode &n10, const VischydroNode &n11, const EOS &eos,
+    double &knn, std::array<double, 4> &knx_d, std::array<double, 16> &kxx_d,
+    std::array<double, 3> &knn_deriv_d, std::array<double, 4 * 3> &knx_deriv_d,
+    std::array<double, 16 * 3> &kxx_deriv_d) {
   // Average state at the vertex
   VischydroNode nv{};
   nv.E = 0.25 * (n00.E + n01.E + n10.E + n11.E);
@@ -430,27 +435,26 @@ void evaluate_vertex_kderivative(const VischydroNode &n00, const VischydroNode &
     findstate_problem("evaluate_vertex_kderivative", -1, -1, nv, nv, eos);
   }
   vhnode_kappa(nv, eos, knn, knx_d, kxx_d);
-  
-  
+
   VischydroNode nvp(nv); // Store the unperturbed state
-  double knnp=0.0;
-  std::array<double,4> knxp{};
-  std::array<double,16> kxxp{};
+  double knnp = 0.0;
+  std::array<double, 4> knxp{};
+  std::array<double, 16> kxxp{};
 
   MDSpan<double, 3> knn_deriv(knn_deriv_d.data());
   MDSpan<double, 4, 3> knx_deriv(knx_deriv_d.data());
   MDSpan<double, 16, 3> kxx_deriv(kxx_deriv_d.data());
 
-  for (int c = 0 ; c< 3 ; c++) {
+  for (int c = 0; c < 3; c++) {
     // Perturb in direction c
     VischydroNode nvp(nv);
     double delta = 1e-6;
     double dQ = (nv.E + nv.p) * delta;
-    if (c==0) {
-      nvp.E = nv.E  + dQ;
-    } else if (c==1) {
-      nvp.M[0] = nv.M[0] + dQ;  
-    } else if (c==2) {
+    if (c == 0) {
+      nvp.E = nv.E + dQ;
+    } else if (c == 1) {
+      nvp.M[0] = nv.M[0] + dQ;
+    } else if (c == 2) {
       nvp.M[1] = nv.M[1] + dQ;
     }
     bool ok = vhnode_findstate(e, nvp, eos);
@@ -459,13 +463,13 @@ void evaluate_vertex_kderivative(const VischydroNode &n00, const VischydroNode &
       findstate_problem("evaluate_vertex_kderivative", -1, -1, nvp, nvp, eos);
     }
     vhnode_kappa(nvp, eos, knnp, knxp, kxxp);
-    
+
     // The factor of 0.25 the four nodes contributing to the vertex
-    knn_deriv(c) = 0.25 * (knnp - knn) / dQ ;
-    for (int a=0; a<4; a++) {
+    knn_deriv(c) = 0.25 * (knnp - knn) / dQ;
+    for (int a = 0; a < 4; a++) {
       knx_deriv(a, c) = 0.25 * (knxp[a] - knx_d[a]) / dQ;
     }
-    for (int a=0; a<16; a++) {
+    for (int a = 0; a < 16; a++) {
       kxx_deriv(a, c) = 0.25 * (kxxp[a] - kxx_d[a]) / dQ;
     }
   }
@@ -511,7 +515,8 @@ PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
     for (int i = ixs - 1; i < ixs + ixm + 1; i++) {
       bool ok = vhnode_findstate(au_last[j][i].e, au[j][i], *run->eos);
       if (!ok) {
-        findstate_problem("LHSIFunction2", i, j, au_last[j][i], au[j][i], *run->eos);
+        findstate_problem("LHSIFunction2", i, j, au_last[j][i], au[j][i],
+                          *run->eos);
       }
       au_last[j][i] = au[j][i];
     }
@@ -554,8 +559,8 @@ PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
               au[j + 1][i + 1].bx(), au[j + 1][i + 1].by()};
       // clang-format on
 
-      evaluate_vertex_k(au[j][i], au[j][i + 1], au[j + 1][i],
-                              au[j + 1][i + 1], *run->eos, knn, knx_d, kxx_d);
+      evaluate_vertex_k(au[j][i], au[j][i + 1], au[j + 1][i], au[j + 1][i + 1],
+                        *run->eos, knn, knx_d, kxx_d);
 
       for (int s = 0; s < 4; s++) {
         int ip = i + is[s];
@@ -624,20 +629,16 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
     for (int i = ixs - 1; i < ixs + ixm + 1; i++) {
       bool ok = vhnode_findstate(au_last[j][i].e, au[j][i], *run->eos);
       if (!ok) {
-        findstate_problem("LHSIJacobian2", i, j, au_last[j][i], au[j][i], *run->eos);
+        findstate_problem("LHSIJacobian2", i, j, au_last[j][i], au[j][i],
+                          *run->eos);
       }
       au_last[j][i] = au[j][i];
     }
   }
 
-  std::array<MatStencil, 12> rows_d{};
-  MDSpan<MatStencil, 4, 3> rows(rows_d.data());
-
+  MatStencil row{};
   std::array<MatStencil, 12> columns_d{};
-  MDSpan<MatStencil, 4, 3> columns(columns_d.data());
-
-  std::array<PetscScalar, 144> values_d{};
-  MDSpan<PetscScalar, 4, 3, 4, 3> values(values_d.data());
+  std::array<PetscScalar, 12> values_d{};
 
   std::array<PetscScalar, 36> chiinv_d{};
   MDSpan<PetscScalar, 4, 3, 3> chiinv(chiinv_d.data());
@@ -661,44 +662,49 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
   std::array<int, 4> js = {0, 0, 1, 1};
 
   // Evaluate the main part
-  for (int j = jys - 1; j < jys + jym; j++) {
-    for (int i = ixs - 1; i < ixs + ixm; i++) {
-      evaluate_vertex_k(au[j][i], au[j][i + 1], au[j + 1][i],
-                              au[j + 1][i + 1], *run->eos, knn, knx_d, kxx_d) ;
+  for (int j = jys - 1; j < jys + jym - 1; j++) {
+    for (int i = ixs - 1; i < ixs + ixm - 1; i++) {
+      evaluate_vertex_k(au[j][i], au[j][i + 1], au[j + 1][i], au[j + 1][i + 1],
+                        *run->eos, knn, knx_d, kxx_d);
 
       evaluate_vertex_chiinv(au[j][i], au[j][i + 1], au[j + 1][i],
-                                    au[j + 1][i + 1], *run->eos, chiinv_d);
+                             au[j + 1][i + 1], *run->eos, chiinv_d);
 
       for (int s1 = 0; s1 < 4; s1++) {
         for (int c1 = 0; c1 < 3; c1++) {
 
           int ip1 = i + is[s1];
           int jp1 = j + js[s1];
-          rows(s1, c1).i = ip1;
-          rows(s1, c1).j = jp1;
-          rows(s1, c1).c = c1;
+          row.i = ip1;
+          row.j = jp1;
+          row.c = c1;
 
+          int nc = 0;
+          int nv = 0;
           for (int s2 = 0; s2 < 4; s2++) {
             for (int c2 = 0; c2 < 3; c2++) {
 
               int ip2 = i + is[s2];
               int jp2 = j + js[s2];
-              columns(s2, c2).i = ip2;
-              columns(s2, c2).j = jp2;
-              columns(s2, c2).c = c2;
+
+              auto &column = columns_d[nc++];
+              column.i = ip2;
+              column.j = jp2;
+              column.c = c2;
 
               if (c1 == 0) {
-                values(s1, c1, s2, c2) =
-                    K[s1] * knn * K[s2] * chiinv(s2, c2, 0) +
-                    K[s1] * knx(0, 0) * Dx(s2, 0) * chiinv(s2, c2, 1 + 0) +
-                    K[s1] * knx(0, 1) * Dx(s2, 0) * chiinv(s2, c2, 1 + 1) +
-                    K[s1] * knx(1, 0) * Dx(s2, 1) * chiinv(s2, c2, 1 + 0) +
-                    K[s1] * knx(1, 1) * Dx(s2, 1) * chiinv(s2, c2, 1 + 1);
+                auto &value = values_d[nv++];
+                value = K[s1] * knn * K[s2] * chiinv(s2, c2, 0) +
+                        K[s1] * knx(0, 0) * Dx(s2, 0) * chiinv(s2, c2, 1 + 0) +
+                        K[s1] * knx(0, 1) * Dx(s2, 0) * chiinv(s2, c2, 1 + 1) +
+                        K[s1] * knx(1, 0) * Dx(s2, 1) * chiinv(s2, c2, 1 + 0) +
+                        K[s1] * knx(1, 1) * Dx(s2, 1) * chiinv(s2, c2, 1 + 1);
               } else if (c1 == 1 or c1 == 2) {
                 int l1 = c1 - 1;
-                values(s1, c1, s2, c2) = 0.0;
+                auto &value = values_d[nv++];
+                value = 0.0;
                 for (int l2 = 0; l2 < 2; l2++) {
-                  values(s1, c1, s2, c2) +=
+                  value +=
                       Dx(s1, l2) * knx(l1, l2) * K[s2] * chiinv(s2, c2, 0) +
                       Dx(s1, l2) * kxx(l1, l2, 0, 0) * Dx(s2, 0) *
                           chiinv(s2, c2, 1 + 0) +
@@ -712,10 +718,10 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
               }
             }
           }
+          MatSetValuesStencil(P, 1, &row, nc, columns_d.data(), values_d.data(),
+                              ADD_VALUES);
         }
       }
-      MatSetValuesStencil(P, 4 * 3, rows_d.data(), 4 * 3, columns_d.data(),
-                          values_d.data(), ADD_VALUES);
     }
   }
 
@@ -733,22 +739,22 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
   return 0;
 }
 
-// PetscErrorCode PetscOptionsCXXBool(const char name[], const char help[], const char def[], bool &value, bool *set) {
+// PetscErrorCode PetscOptionsCXXBool(const char name[], const char help[],
+// const char def[], bool &value, bool *set) {
 //   PetscBool petsc_value = value ? PETSC_TRUE : PETSC_FALSE;
-//   PetscCall(PetscOptionsBool(name, help, def, petsc_value, &petsc_value, set));
-//   value = (petsc_value == PETSC_TRUE) ? true : false;
-//   return 0;
+//   PetscCall(PetscOptionsBool(name, help, def, petsc_value, &petsc_value,
+//   set)); value = (petsc_value == PETSC_TRUE) ? true : false; return 0;
 // }
-PetscErrorCode Vischydro::set_petsc_options()
-{
-  // PetscOptionsBegin(PETSC_COMM_WORLD, "vhydro_", "Viscous Hydrodynamics options",
+PetscErrorCode Vischydro::set_petsc_options() {
+  // PetscOptionsBegin(PETSC_COMM_WORLD, "vhydro_", "Viscous Hydrodynamics
+  // options",
   //                   NULL);
-  
+
   // PetscBool bj = is_bjorken ? PETSC_TRUE : PETSC_FALSE;
   // PetscCall(PetscOptionsBool(
   //     "-is_bjorken", "Enable Bjorken expansion source terms", "",
   //     bj, &bj, NULL));
-  //double CFL = 0.8;
+  // double CFL = 0.8;
   // PetscCall(PetscOptionsReal(
   //     "-cfl_max", "Maximum CFL number for time step control", "", cfl,
   //     &cfl, NULL));
@@ -759,12 +765,11 @@ PetscErrorCode Vischydro::set_petsc_options()
   //                            &highest_order_term_only, NULL));
 
   // Add options here in the future
-  //PetscOptionsEnd();
+  // PetscOptionsEnd();
   return 0;
 }
-Vischydro::Vischydro(nlohmann::json & config, const EOS *eosin) : eos(eosin) {
+Vischydro::Vischydro(nlohmann::json &config, const EOS *eosin) : eos(eosin) {
 
-  
   // Extract parameters from JSON
   try {
     nx = config.at("nx").get<int>();
@@ -774,8 +779,7 @@ Vischydro::Vischydro(nlohmann::json & config, const EOS *eosin) : eos(eosin) {
     ymin = config.at("ymin").get<double>();
     ymax = config.at("ymax").get<double>();
   } catch (nlohmann::json::exception &e) {
-    std::cerr << "Error parsing configuration JSON: " << e.what()
-              << std::endl;
+    std::cerr << "Error parsing configuration JSON: " << e.what() << std::endl;
     std::abort();
   }
   // set_petsc_options();
@@ -784,7 +788,6 @@ Vischydro::Vischydro(nlohmann::json & config, const EOS *eosin) : eos(eosin) {
   cfl = config.value("cfl_max", 0.8);
   is_bjorken = config.value("is_bjorken", true);
   highest_order_term_only = config.value("highest_order_term_only", false);
-
 
   double Lx = xmax - xmin;
   double Ly = ymax - ymin;
@@ -795,8 +798,8 @@ Vischydro::Vischydro(nlohmann::json & config, const EOS *eosin) : eos(eosin) {
   const int stencil_width = 2;
   // 2d grid with periodic boundary conditions
   DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC,
-                DMDA_STENCIL_BOX, nx, ny, PETSC_DECIDE, PETSC_DECIDE,
-                VischydroNode::NDOF, stencil_width, NULL, NULL, &domain);
+               DMDA_STENCIL_BOX, nx, ny, PETSC_DECIDE, PETSC_DECIDE,
+               VischydroNode::NDOF, stencil_width, NULL, NULL, &domain);
   DMSetFromOptions(domain);
   DMSetUp(domain);
   DMCreateGlobalVector(domain, &solution);
@@ -819,7 +822,6 @@ Vischydro::Vischydro(nlohmann::json & config, const EOS *eosin) : eos(eosin) {
   TSAdaptSetType(adapt, TSADAPTNONE);
   TSSetExactFinalTime(stepper, TS_EXACTFINALTIME_STEPOVER);
 
-
   TSSetType(stepper, TSEIMEX);
   TSSetSolution(stepper, solution);
   TSSetRHSFunction(stepper, NULL, EulerRHSFunction, this);
@@ -834,7 +836,6 @@ Vischydro::Vischydro(nlohmann::json & config, const EOS *eosin) : eos(eosin) {
   TSSetPostStep(stepper, PostStepInversion);
   TSSetPostStage(stepper, PostStageInversion);
 
-
   // Allow for a couple of failed iterations before giving up
   PetscCallVoid(TSSetMaxSNESFailures(stepper, 5));
   // Not sure we need this. This forces
@@ -846,4 +847,3 @@ Vischydro::Vischydro(nlohmann::json & config, const EOS *eosin) : eos(eosin) {
 
   TSSetFromOptions(stepper);
 }
-
