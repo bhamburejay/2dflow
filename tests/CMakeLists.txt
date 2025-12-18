@@ -1,4 +1,7 @@
 
+configure_file(./test_boundary_conditions.sh ./test_boundary_conditions.sh)
+add_executable(test_boundary_conditions.exe ./test_boundary_conditions.cpp ${SOURCES})
+target_link_libraries(test_boundary_conditions.exe PkgConfig::PETSC ${HDF5_LIBRARIES})
 
 add_executable(test_nlohmann_json.exe ./test_nlohmann_json.cpp ${SOURCES})
 target_link_libraries(test_nlohmann_json.exe PkgConfig::PETSC ${HDF5_LIBRARIES})

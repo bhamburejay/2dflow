@@ -3,10 +3,14 @@
 #include "DFHydroMDSpan.hpp"
 #include "Vischydro_impl.hpp"
 #include <nlohmann/json.hpp>
+#include <petscdmda.h>
+#include <petscdmdatypes.h>
 #ifdef PETSC_HAVE_HDF5
 #include <petscviewerhdf5.h>
 #endif
 #include <petscerror.h>
+
+namespace DFHydro {
 
 using namespace DFHydro;
 
@@ -130,6 +134,64 @@ void findstate_problem(const std::string &context, const int &i, const int &j,
   }
 }
 
+void set_boundary_conditions(VischydroNode **asol, const DMDALocalInfo &info,
+                             bool is_periodic) {
+
+  if (is_periodic == true) {
+    return; // Boundary conditions are handled automatically by PETSc
+  }
+
+  PetscInt ixs = info.xs;
+  PetscInt jys = info.ys;
+  PetscInt ixm = info.xm;
+  PetscInt jym = info.ym;
+  PetscInt mx = info.mx;
+  PetscInt my = info.my;
+  int nbc = 2;
+
+  // Set boundary conditions in x direction
+  for (PetscInt j = jys - nbc; j < jys + jym + nbc; j++) {
+    for (PetscInt n = 1; n <= nbc; n++) {
+      if (ixs == 0) {
+        // Left boundary
+        PetscInt i_left = ixs - n;
+        PetscInt i_src, j_src;
+        i_src = ixs;
+        j_src = std::min(std::max(j, 0), my - 1);
+        asol[j][i_left] = asol[j_src][i_src];
+      }
+      if (ixs + ixm == mx) {
+        // Right boundary
+        PetscInt i_right = ixs + ixm - 1 + n;
+        PetscInt i_src, j_src;
+        i_src = ixs + ixm - 1;
+        j_src = std::min(std::max(j, 0), my - 1);
+        asol[j][i_right] = asol[j_src][i_src];
+      }
+    }
+  }
+  // Set boundary conditions in y direction
+  for (PetscInt i = ixs - nbc; i < ixs + ixm + nbc; i++) {
+    for (PetscInt n = 1; n <= nbc; n++) {
+      // Bottom boundary
+      if (jys == 0) {
+        PetscInt j_bottom = jys - n;
+        PetscInt j_src, i_src;
+        j_src = jys;
+        i_src = std::min(std::max(i, 0), mx - 1);
+        asol[j_bottom][i] = asol[j_src][i_src];
+      }
+      // Top boundary
+      if (jys + jym == my) {
+        PetscInt j_top = jys + jym - 1 + n;
+        PetscInt j_src = jys + jym - 1;
+        PetscInt i_src = std::min(std::max(i, 0), mx - 1);
+        asol[j_top][i] = asol[j_src][i_src];
+      }
+    }
+  }
+}
+
 // Presently this function take in E,M and returns dE/dt and dM/dt
 // NOTE TO SELF: Need to change this to primitive variable e
 PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
@@ -145,8 +207,16 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   PetscCall(DMGlobalToLocal(run.domain, U, INSERT_VALUES, run.local_solution));
   VischydroNode **asol;
   PetscCall(DMDAVecGetArray(run.domain, run.local_solution, &asol));
-  VischydroNode **asol_last;
-  PetscCall(DMDAVecGetArray(run.domain, run.local_solution_last, &asol_last));
+  // VischydroNode **asol_last;
+  // PetscCall(DMDAVecGetArray(run.domain, run.local_solution_last,
+  // &asol_last));
+
+  // Get the grid information
+  DMDALocalInfo info;
+  PetscCall(DMDAGetLocalInfo(run.domain, &info));
+
+  // Set the boundary condtions
+  set_boundary_conditions(asol, info, run.has_periodic_bc());
 
   // Loop over grid points and calculate RHS
   PetscInt ixs, jys, ixm, jym;
@@ -155,17 +225,17 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   const double epsilon = 1.e-8;
   limitter slope(limitter::kCenteredMinMod);
 
-  for (int j = jys; j < jys + jym; j++) {
-    // Solve for the internal state, using the energy density from last step
+  for (int j = jys - 2; j < jys + jym + 2; j++) {
     for (int i = ixs - 2; i < ixs + ixm + 2; i++) {
-      bool ok = vhnode_findstate(asol_last[j][i].e, asol[j][i], eos);
+      bool ok = vhnode_findstate(asol[j][i].e, asol[j][i], eos);
       if (!ok) {
-        findstate_problem("EulerRHSFunction_X", i, j, asol_last[j][i],
-                          asol[j][i], eos);
+        findstate_problem("EulerRHSFunction init", i, j, asol[j][i], asol[j][i],
+                          eos);
       }
-      asol_last[j][i] = asol[j][i];
     }
+  }
 
+  for (int j = jys; j < jys + jym; j++) {
     for (int i = ixs; i < ixs + ixm + 1; i++) {
       VischydroNode nL{};
       VischydroNode nR{};
@@ -224,16 +294,6 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
     }
   }
   for (int i = ixs; i < ixs + ixm; i++) {
-    // Solve for the internal state, using the energy density from last step
-    for (int j = jys - 2; j < jys + jym + 2; j++) {
-      bool ok = vhnode_findstate(asol_last[j][i].e, asol[j][i], eos);
-      if (!ok) {
-        findstate_problem("EulerRHSFunction_Y", i, j, asol_last[j][i],
-                          asol[j][i], eos);
-      }
-      asol_last[j][i] = asol[j][i];
-    }
-
     for (int j = jys; j < jys + jym + 1; j++) {
       VischydroNode nL{};
       VischydroNode nR{};
@@ -307,8 +367,8 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   }
 
   // Return the pointer to the local array back to the memory space
-  PetscCall(
-      DMDAVecRestoreArray(run.domain, run.local_solution_last, &asol_last));
+  // PetscCall(
+  //     DMDAVecRestoreArray(run.domain, run.local_solution_last, &asol_last));
   PetscCall(DMDAVecRestoreArray(run.domain, run.local_solution, &asol));
   PetscCall(DMDAVecRestoreArray(run.domain, G, &ag));
 
@@ -330,22 +390,22 @@ PetscErrorCode PostStepInversion(TS ts) {
   VischydroNode **au;
   PetscCall(DMDAVecGetArray(run.domain, Y, &au));
   VischydroNode **au_last;
-  PetscCall(DMDAVecGetArray(run.domain, run.local_solution_last, &au_last));
+  PetscCall(DMDAVecGetArray(run.domain, run.solution, &au_last));
 
   int ixs, ixm, jys, jym;
   DMDAGetCorners(run.domain, &ixs, &jys, NULL, &ixm, &jym, NULL);
   for (int j = jys; j < jys + jym; j++) {
     for (int i = ixs; i < ixs + ixm; i++) {
-      bool ok = vhnode_findstate(au_last[j][i].e, au[j][i], *run.eos);
+      bool ok = vhnode_findstate(au[j][i].e, au[j][i], *run.eos);
       if (!ok) {
-        findstate_problem("PostStepInversion", i, j, au_last[j][i], au[j][i],
+        findstate_problem("PostStepInversion", i, j, au[j][i], au[j][i],
                           *run.eos);
       }
       au_last[j][i] = au[j][i];
     }
   }
-  PetscCall(DMDAVecRestoreArray(run.domain, run.solution, &au));
-  PetscCall(DMDAVecRestoreArray(run.domain, run.local_solution_last, &au_last));
+  PetscCall(DMDAVecRestoreArray(run.domain, Y, &au));
+  PetscCall(DMDAVecRestoreArray(run.domain, run.solution, &au_last));
   return 0;
 }
 
@@ -359,24 +419,20 @@ PetscErrorCode PostStageInversion(TS ts, PetscReal stagetime,
 
   VischydroNode **au;
   PetscCall(DMDAVecGetArray(run.domain, Y[stageindex], &au));
-  VischydroNode **au_last;
-  PetscCall(DMDAVecGetArray(run.domain, run.local_solution_last, &au_last));
 
   int ixs, ixm, jys, jym;
   DMDAGetCorners(run.domain, &ixs, &jys, NULL, &ixm, &jym, NULL);
   for (int j = jys; j < jys + jym; j++) {
     for (int i = ixs; i < ixs + ixm; i++) {
-      bool ok = vhnode_findstate(au_last[j][i].e, au[j][i], *run.eos);
+      bool ok = vhnode_findstate(au[j][i].e, au[j][i], *run.eos);
       if (!ok) {
         std::string context =
             "PostStageInversion_" + std::to_string(stageindex);
-        findstate_problem(context, i, j, au_last[j][i], au[j][i], *run.eos);
+        findstate_problem(context, i, j, au[j][i], au[j][i], *run.eos);
       }
-      au_last[j][i] = au[j][i];
     }
   }
   PetscCall(DMDAVecRestoreArray(run.domain, Y[stageindex], &au));
-  PetscCall(DMDAVecRestoreArray(run.domain, run.local_solution_last, &au_last));
   return 0;
 }
 
@@ -503,9 +559,10 @@ PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
   VischydroNode **au;
   PetscCall(DMDAVecGetArray(run->domain, run->local_solution, &au));
 
-  // Local array with the boundary cells guess
-  VischydroNode **au_last;
-  PetscCall(DMDAVecGetArray(run->domain, run->local_solution_last, &au_last));
+  // Get the grid information
+  DMDALocalInfo info;
+  PetscCall(DMDAGetLocalInfo(run->domain, &info));
+  set_boundary_conditions(au, info, run->has_periodic_bc());
 
   int ixs, ixm, jys, jym;
   DMDAGetCorners(run->domain, &ixs, &jys, 0, &ixm, &jym, 0);
@@ -513,12 +570,10 @@ PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
   // Loop over the grid and call idealHydroCellSolve
   for (int j = jys - 1; j < jys + jym + 1; j++) {
     for (int i = ixs - 1; i < ixs + ixm + 1; i++) {
-      bool ok = vhnode_findstate(au_last[j][i].e, au[j][i], *run->eos);
+      bool ok = vhnode_findstate(au[j][i].e, au[j][i], *run->eos);
       if (!ok) {
-        findstate_problem("LHSIFunction2", i, j, au_last[j][i], au[j][i],
-                          *run->eos);
+        findstate_problem("LHSIFunction2", i, j, au[j][i], au[j][i], *run->eos);
       }
-      au_last[j][i] = au[j][i];
     }
   }
 
@@ -566,7 +621,7 @@ PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
         int ip = i + is[s];
         int jp = j + js[s];
 
-        // skip if outside golbal vector domain
+        // skip if outside computational domain
         if (not(ip >= ixs and ip < ixs + ixm and jp >= jys and
                 jp < jys + jym)) {
           continue;
@@ -595,8 +650,6 @@ PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
   }
   PetscCall(DMDAVecRestoreArray(run->domain, F, &aF));
   PetscCall(DMDAVecRestoreArray(run->domain, run->local_solution, &au));
-  PetscCall(
-      DMDAVecRestoreArray(run->domain, run->local_solution_last, &au_last));
   return 0;
 }
 PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
@@ -612,8 +665,10 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
   VischydroNode **au;
   PetscCall(DMDAVecGetArray(run->domain, run->local_solution, &au));
 
-  VischydroNode **au_last;
-  PetscCall(DMDAVecGetArray(run->domain, run->local_solution_last, &au_last));
+  DMDALocalInfo info;
+  PetscCall(DMDAGetLocalInfo(run->domain, &info));
+  set_boundary_conditions(au, info, run->has_periodic_bc());
+
   double dx = run->get_dx();
   double dy = run->get_dy();
 
@@ -627,12 +682,10 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
   // Loop over the grid so that the local au[j][i] cells are complete
   for (int j = jys - 1; j < jys + jym + 1; j++) {
     for (int i = ixs - 1; i < ixs + ixm + 1; i++) {
-      bool ok = vhnode_findstate(au_last[j][i].e, au[j][i], *run->eos);
+      bool ok = vhnode_findstate(au[j][i].e, au[j][i], *run->eos);
       if (!ok) {
-        findstate_problem("LHSIJacobian2", i, j, au_last[j][i], au[j][i],
-                          *run->eos);
+        findstate_problem("LHSIJacobian2", i, j, au[j][i], au[j][i], *run->eos);
       }
-      au_last[j][i] = au[j][i];
     }
   }
 
@@ -662,8 +715,8 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
   std::array<int, 4> js = {0, 0, 1, 1};
 
   // Evaluate the main part
-  for (int j = jys - 1; j < jys + jym - 1; j++) {
-    for (int i = ixs - 1; i < ixs + ixm - 1; i++) {
+  for (int j = jys - 1; j < jys + jym; j++) {
+    for (int i = ixs - 1; i < ixs + ixm; i++) {
       evaluate_vertex_k(au[j][i], au[j][i + 1], au[j + 1][i], au[j + 1][i + 1],
                         *run->eos, knn, knx_d, kxx_d);
 
@@ -675,9 +728,19 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
 
           int ip1 = i + is[s1];
           int jp1 = j + js[s1];
-          row.i = ip1;
+
+          // skip if the row is outside computational domain.
+          if (not(ip1 >= ixs and ip1 < ixs + ixm and jp1 >= jys and
+                  jp1 < jys + jym)) {
+            continue;
+          }
+
+          row.i = ip1; // row(s1, c1);
           row.j = jp1;
           row.c = c1;
+          if (c1 == 0 and run->get_highest_order_term_only()) {
+            continue;
+          }
 
           int nc = 0;
           int nv = 0;
@@ -687,13 +750,18 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
               int ip2 = i + is[s2];
               int jp2 = j + js[s2];
 
-              auto &column = columns_d[nc++];
+              if (not run->has_periodic_bc()) {
+                ip2 = std::min(std::max(ip2, 0), info.mx - 1);
+                jp2 = std::min(std::max(jp2, 0), info.my - 1);
+              }
+
+              auto &column = columns_d[nc++]; // columns(s2, c2);
               column.i = ip2;
               column.j = jp2;
               column.c = c2;
 
               if (c1 == 0) {
-                auto &value = values_d[nv++];
+                auto &value = values_d[nv++]; // values(s1, c1, s2, c2);
                 value = K[s1] * knn * K[s2] * chiinv(s2, c2, 0) +
                         K[s1] * knx(0, 0) * Dx(s2, 0) * chiinv(s2, c2, 1 + 0) +
                         K[s1] * knx(0, 1) * Dx(s2, 0) * chiinv(s2, c2, 1 + 1) +
@@ -701,7 +769,7 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
                         K[s1] * knx(1, 1) * Dx(s2, 1) * chiinv(s2, c2, 1 + 1);
               } else if (c1 == 1 or c1 == 2) {
                 int l1 = c1 - 1;
-                auto &value = values_d[nv++];
+                auto &value = values_d[nv++]; // values(s1, c1, s2, c2);
                 value = 0.0;
                 for (int l2 = 0; l2 < 2; l2++) {
                   value +=
@@ -726,9 +794,6 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
   }
 
   PetscCall(DMDAVecRestoreArray(run->domain, run->local_solution, &au));
-  PetscCall(
-      DMDAVecRestoreArray(run->domain, run->local_solution_last, &au_last));
-
   MatAssemblyBegin(P, MAT_FINAL_ASSEMBLY);
   MatAssemblyEnd(P, MAT_FINAL_ASSEMBLY);
   if (J != P) {
@@ -787,7 +852,16 @@ Vischydro::Vischydro(nlohmann::json &config, const EOS *eosin) : eos(eosin) {
   // Set options from JSON, with defaults
   cfl = config.value("cfl_max", 0.8);
   is_bjorken = config.value("is_bjorken", true);
+  is_periodic = config.value("is_periodic", true);
+  use_ideal_step_only = config.value("use_ideal_step_only", false);
   highest_order_term_only = config.value("highest_order_term_only", false);
+
+  // cfl = config.at("cfl_max").get<double>();
+  // is_bjorken = config.at("is_bjorken").get<bool>();
+  // is_periodic = config.at("is_periodic").get<bool>();
+  // use_ideal_step_only = config.at("use_ideal_step_only").get<bool>();
+  // highest_order_term_only =
+  //     config.at("highest_order_term_only").get<bool>();
 
   double Lx = xmax - xmin;
   double Ly = ymax - ymin;
@@ -797,9 +871,15 @@ Vischydro::Vischydro(nlohmann::json &config, const EOS *eosin) : eos(eosin) {
 
   const int stencil_width = 2;
   // 2d grid with periodic boundary conditions
-  DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC,
-               DMDA_STENCIL_BOX, nx, ny, PETSC_DECIDE, PETSC_DECIDE,
-               VischydroNode::NDOF, stencil_width, NULL, NULL, &domain);
+  if (is_periodic) {
+    DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_PERIODIC, DM_BOUNDARY_PERIODIC,
+                 DMDA_STENCIL_BOX, nx, ny, PETSC_DECIDE, PETSC_DECIDE,
+                 VischydroNode::NDOF, stencil_width, NULL, NULL, &domain);
+  } else {
+    DMDACreate2d(PETSC_COMM_WORLD, DM_BOUNDARY_GHOSTED, DM_BOUNDARY_GHOSTED,
+                 DMDA_STENCIL_BOX, nx, ny, PETSC_DECIDE, PETSC_DECIDE,
+                 VischydroNode::NDOF, stencil_width, NULL, NULL, &domain);
+  }
   DMSetFromOptions(domain);
   DMSetUp(domain);
   DMCreateGlobalVector(domain, &solution);
@@ -822,28 +902,38 @@ Vischydro::Vischydro(nlohmann::json &config, const EOS *eosin) : eos(eosin) {
   TSAdaptSetType(adapt, TSADAPTNONE);
   TSSetExactFinalTime(stepper, TS_EXACTFINALTIME_STEPOVER);
 
-  TSSetType(stepper, TSEIMEX);
-  TSSetSolution(stepper, solution);
-  TSSetRHSFunction(stepper, NULL, EulerRHSFunction, this);
-
-  DMCreateGlobalVector(domain, &Residual);
-  DMCreateMatrix(domain, &Jacobian);
-
-  TSSetIFunction(stepper, Residual, LHSIFunction2, this);
-  TSSetIJacobian(stepper, Jacobian, Jacobian, LHSIJacobian2, this);
-
   TSSetPreStep(stepper, PreStepInversion);
   TSSetPostStep(stepper, PostStepInversion);
   TSSetPostStage(stepper, PostStageInversion);
 
-  // Allow for a couple of failed iterations before giving up
-  PetscCallVoid(TSSetMaxSNESFailures(stepper, 5));
-  // Not sure we need this. This forces
-  // at least one iteration of the solver
-  SNES snes;
-  TSGetSNES(stepper, &snes);
-  SNESSetForceIteration(snes, PETSC_TRUE);
-  SNESSetFromOptions(snes);
+  if (use_ideal_step_only) {
+    TSSetType(stepper, TSSSP);
+    TSSetRHSFunction(stepper, NULL, EulerRHSFunction, this);
+    TSSetFromOptions(stepper);
+    return;
+  } else {
 
-  TSSetFromOptions(stepper);
+    //
+    TSSetType(stepper, TSEIMEX);
+    TSSetSolution(stepper, solution);
+    TSSetRHSFunction(stepper, NULL, EulerRHSFunction, this);
+
+    DMCreateGlobalVector(domain, &Residual);
+    DMCreateMatrix(domain, &Jacobian);
+
+    TSSetIFunction(stepper, Residual, LHSIFunction2, this);
+    TSSetIJacobian(stepper, Jacobian, Jacobian, LHSIJacobian2, this);
+
+    // Allow for a couple of failed iterations before giving up
+    PetscCallVoid(TSSetMaxSNESFailures(stepper, 5));
+    // // Not sure we need this. This forces
+    // // at least one iteration of the solver
+    // SNES snes;
+    // TSGetSNES(stepper, &snes);
+    // SNESSetForceIteration(snes, PETSC_TRUE);
+    // SNESSetFromOptions(snes);
+
+    TSSetFromOptions(stepper);
+  }
 }
+} // namespace DFHydro

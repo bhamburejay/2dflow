@@ -2,6 +2,10 @@
 #define Vischydro_impl_hpp
 
 #include <numeric>
+#include <petscdmda.h>
+#include <petsc.h>
+#include "VischydroNode.hpp"
+
 namespace DFHydro {
 class limitter {
 
@@ -29,5 +33,8 @@ public:
   }
   limitter(const int &imethod = limitter::kCenteredMinMod) : method(imethod){};
 };
+
+void set_boundary_conditions(VischydroNode **asol,
+                             const DMDALocalInfo &info, bool is_periodic) ;
 }
 #endif // Vischydro_impl_hpp

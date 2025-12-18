@@ -19,7 +19,8 @@ void vhnode_fill(VischydroNode &node, const EOS &eos) {
     node.M[i] = (e + node.p) * u0 * node.u[i];
   }
 }
-void vhnode_fill(VischydroNode &node, const double &e, const double &ux, const double &uy, const EOS &eos) {
+void vhnode_fill(VischydroNode &node, const double &e, const double &ux,
+                 const double &uy, const EOS &eos) {
   node.e = e;
   node.u[0] = ux;
   node.u[1] = uy;
@@ -32,8 +33,8 @@ void vhnode_fill(VischydroNode &node, const double &e, const double &ux, const d
 double idealHydroCellIFunction(const double &e, /* out */ VischydroNode &n,
                                const EOS &eos, bool &ok) {
   double rhob = 0.;
-  
-  // This should completely filll the cell except for 
+
+  // This should completely filll the cell except for
   n.e = e;
   n.p = eos.get_pressure(e, rhob);
   n.beta = 1. / eos.get_temperature(e, rhob);
@@ -68,15 +69,15 @@ double idealHydroCellIFunctionDerivative(const double &e,
 // density is returned, and the pressure, beta, and cs2 are modified, and the
 // node is filled with the values of the EOS. However, E and M are not modified.
 bool vhnode_findstate(const double &ein, /* out */ VischydroNode &n,
-                           const EOS &eos) {
+                      const EOS &eos) {
   double abstol = 1.e-15;
   double reltol = 1.e-8;
   double e = ein;
   double rhob = 0.;
 
-  bool ok = true ;
+  bool ok = true;
   double f = idealHydroCellIFunction(e, n, eos, ok);
-  if (!ok)  {
+  if (!ok) {
     return false;
   }
 
@@ -89,7 +90,8 @@ bool vhnode_findstate(const double &ein, /* out */ VischydroNode &n,
     double df = idealHydroCellIFunctionDerivative(e, n, eos);
     e -= f / df;
     f = idealHydroCellIFunction(e, n, eos, ok);
-    if (!ok) return false;
+    if (!ok)
+      return false;
     it++;
   }
   if (it == maxit) {
@@ -100,10 +102,21 @@ bool vhnode_findstate(const double &ein, /* out */ VischydroNode &n,
   return true;
 }
 
+bool vhnode_checkstate(const VischydroNode &n) {
+  double abstol = 1.e-15;
+  double reltol = 1.e-8;
+  double v = n.Mnrm() / (n.E + n.p);
+  double f = n.e + n.p - (n.E + n.p) * (1. - v * v);
+  if (std::abs(f) > abstol and std::abs(f / n.e) > reltol) {
+    return false;
+  }
+  return true;
+}
+
 // Returns the inverse susceptibility matrix chiiinv for the given VischydroNode
 // n and EOS eos
 void vhnode_chiinv(const VischydroNode &n, const EOS &eos,
-                     std::array<double, 9> &chiinv_d) {
+                   std::array<double, 9> &chiinv_d) {
   double rhob = 0.;
   double e = n.e;
   double u0 = n.u0();
@@ -127,8 +140,7 @@ void vhnode_chiinv(const VischydroNode &n, const EOS &eos,
       (1 - v2 + ((-1 + cs2 * (-4 + v2)) * vx * vx) / (-1 + cs2 * v2)) * beta *
       u0 / w;
   chiinv(1, 2) =
-      ((-1 + cs2 * (-4 + v2)) * vx * vy) / (-1 + cs2 * v2) * beta *
-      u0 / w;
+      ((-1 + cs2 * (-4 + v2)) * vx * vy) / (-1 + cs2 * v2) * beta * u0 / w;
 
   chiinv(2, 0) = chiinv(0, 2);
   chiinv(2, 1) = chiinv(1, 2);
@@ -137,13 +149,11 @@ void vhnode_chiinv(const VischydroNode &n, const EOS &eos,
       u0 / w;
 }
 
-inline double Power(double base, int exp) {
-  return std::pow(base, exp);
-}
+inline double Power(double base, int exp) { return std::pow(base, exp); }
 
 // Returns the value of knn, knx, kxx for the given VischydroNode n and EOS
 void vhnode_kappa(const VischydroNode &n, const EOS &eos, double &knn,
-std::array<double, 4> &knx, std::array<double, 16> &kxx) {
+                  std::array<double, 4> &knx, std::array<double, 16> &kxx) {
   double cs2 = n.get_cs2();
   double w = n.w();
   double beta = n.get_beta();
@@ -154,8 +164,8 @@ std::array<double, 4> &knx, std::array<double, 16> &kxx) {
   double rhob = 0.;
   double T = 1. / beta;
   double s = n.s();
-  double Teta = T*s*eos.get_eta_by_s(n.e, rhob)/pow(1-cs2*v2, 2);
-  double Tzeta = T*s*eos.get_zeta_by_s(n.e, rhob)/pow(1-cs2*v2, 2);
+  double Teta = T * s * eos.get_eta_by_s(n.e, rhob) / pow(1 - cs2 * v2, 2);
+  double Tzeta = T * s * eos.get_zeta_by_s(n.e, rhob) / pow(1 - cs2 * v2, 2);
 
   double knn_shear, knn_bulk;
   std::array<double, 4> knx_shear, knx_bulk;
@@ -164,12 +174,12 @@ std::array<double, 4> &knx, std::array<double, 16> &kxx) {
 #include "VischydroNode_inc.hpp"
 
   // Combine shear and bulk contributions
-  knn = knn_shear*Teta + knn_bulk*Tzeta;
+  knn = knn_shear * Teta + knn_bulk * Tzeta;
   for (int i = 0; i < 4; i++) {
-    knx[i] = knx_shear[i]*Teta + knx_bulk[i]*Tzeta;
+    knx[i] = knx_shear[i] * Teta + knx_bulk[i] * Tzeta;
   }
   for (int i = 0; i < 16; i++) {
-    kxx[i] = kxx_shear[i]*Teta + kxx_bulk[i]*Tzeta;
+    kxx[i] = kxx_shear[i] * Teta + kxx_bulk[i] * Tzeta;
   }
 }
 

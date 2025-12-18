@@ -25,20 +25,23 @@ public:
   Vischydro(nlohmann::json &config, const EOS *eosin);
 
   ~Vischydro() {
+    if (not use_ideal_step_only) {
+      VecDestroy(&Residual);
+      MatDestroy(&Jacobian);
+    }
     TSDestroy(&stepper);
     VecDestroy(&local_solution);
+    VecDestroy(&local_solution_last);
     VecDestroy(&solution);
     DMDestroy(&domain);
-    VecDestroy(&Residual);
-    MatDestroy(&Jacobian);
   }
 
   // Save the current grid to a file using HDF5. The filename is optional and
   // defaults to output.h5
-  void save(const std::string filename = "output.h5") ; 
+  void save(const std::string filename = "output.h5");
 
   // Load initial conditions from an HDF5 file
-  void load_initial_conditions(const std::string filename) ; 
+  void load_initial_conditions(const std::string filename);
 
   void print_grid_dimensions() const {
     std::cout << "Grid dimensions: " << nx << " " << ny << std::endl;
@@ -59,18 +62,21 @@ public:
   int get_nx() const { return nx; }
   int get_ny() const { return ny; }
   bool is_bjorken_expansion() const { return is_bjorken; }
-  bool get_highest_order_term_only() const { return bool(highest_order_term_only); }
+  bool get_highest_order_term_only() const {
+    return bool(highest_order_term_only);
+  }
+  bool has_periodic_bc() const { return is_periodic; }
   double get_cfl() const { return cfl; }
   double get_default_time_step() const { return cfl * std::min(dx, dy); }
 
   void solve(double t1, double t2, double dt);
 
-public: 
+public:
   Vec local_solution;
   Vec local_solution_last;
 
 private:
-  nlohmann::json options ;
+  nlohmann::json options;
   int nx;
   int ny;
   double dx;
@@ -80,13 +86,14 @@ private:
   double ymin;
   double ymax;
   double cfl;
-  bool is_bjorken;  
+  bool is_bjorken;
   bool highest_order_term_only;
+  bool use_ideal_step_only;
+  bool is_periodic;
   Vec Residual;
   Mat Jacobian;
   PetscErrorCode set_petsc_options();
 };
 } // namespace DFHydro
-
 
 #endif

@@ -22,7 +22,9 @@ _input_data = {
         "ndof": 9,
         "cfl_max": 0.8,
         "is_bjorken": True,
-        "highest_order_term_only": False
+        "highest_order_term_only": True, 
+        "use_ideal_step_only": False,
+        "is_periodic": False
     },
     "VischydroMain": {
         "print_frequency": 10,
