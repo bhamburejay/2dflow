@@ -851,7 +851,7 @@ Vischydro::Vischydro(nlohmann::json &config, const EOS *eosin) : eos(eosin) {
     std::abort();
   }
   nlohmann::json defaults = {
-      {"cfl_max", 0.9},
+      {"cfl_max", 0.8},
       {"is_bjorken", true},
       {"is_periodic", true},
       {"use_ideal_step_only", false},
