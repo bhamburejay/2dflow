@@ -37,10 +37,6 @@ void Vischydro::load_initial_conditions(const std::string filename) {
   // Return the pointer to the local array back to the memory space
   PetscCallVoid(DMDAVecRestoreArray(domain, solution, &asol));
 
-  // Fill in the boundary cells and the local last solution based on the initial
-  // conditions.
-  PetscCallVoid(
-      DMGlobalToLocal(domain, solution, INSERT_VALUES, local_solution_last));
 #else
   PetscPrintf(PETSC_COMM_WORLD, "HDF5 support not available. Cannot load "
                                 "initial conditions from file.\n");
@@ -68,7 +64,51 @@ void Vischydro::solve(double t1, double t2, double dt) {
   PetscCallVoid(TSSetTime(stepper, t1));
   PetscCallVoid(TSSetMaxTime(stepper, t2));
   PetscCallVoid(TSSetTimeStep(stepper, dt));
-  PetscCallVoid(TSSolve(stepper, solution));
+  PetscCallVoid(TSSolve(stepper, qsolution));
+}
+
+PetscErrorCode TransferSolutionToQGrid(const DM &domain, const Vec &solution,
+                                       const DM &qdomain,
+                                       const Vec &qsolution) {
+  VischydroNode **asol;
+  PetscCall(DMDAVecGetArrayRead(domain, solution, &asol));
+
+  VischydroQNode **qsol;
+  PetscCall(DMDAVecGetArray(qdomain, qsolution, &qsol));
+
+  int ixs, iys, ixm, iym;
+  DMDAGetCorners(domain, &ixs, &iys, NULL, &ixm, &iym, NULL);
+  for (int j = iys; j < iys + iym; j++) {
+    for (int i = ixs; i < ixs + ixm; i++) {
+      qsol[j][i].E = asol[j][i].E;
+      qsol[j][i].M[0] = asol[j][i].M[0];
+      qsol[j][i].M[1] = asol[j][i].M[1];
+    }
+  }
+  PetscCall(DMDAVecRestoreArrayRead(domain, solution, &asol));
+  PetscCall(DMDAVecRestoreArray(qdomain, qsolution, &qsol));
+  return 0;
+}
+PetscErrorCode TransferQGridToSolution(const DM &qdomain, const Vec &qsolution,
+                                       const DM &domain, const Vec &solution) {
+  VischydroNode **asol;
+  PetscCall(DMDAVecGetArray(domain, solution, &asol));
+
+  VischydroQNode **qsol;
+  PetscCall(DMDAVecGetArrayRead(qdomain, qsolution, &qsol));
+
+  int ixs, iys, ixm, iym;
+  DMDAGetCorners(domain, &ixs, &iys, NULL, &ixm, &iym, NULL);
+  for (int j = iys; j < iys + iym; j++) {
+    for (int i = ixs; i < ixs + ixm; i++) {
+      asol[j][i].E = qsol[j][i].E;
+      asol[j][i].M[0] = qsol[j][i].M[0];
+      asol[j][i].M[1] = qsol[j][i].M[1];
+    }
+  }
+  PetscCall(DMDAVecRestoreArray(domain, solution, &asol));
+  PetscCall(DMDAVecRestoreArrayRead(qdomain, qsolution, &qsol));
+  return 0;
 }
 
 // Returns the largest and smalllest (most-negative) propagation velocities for
@@ -138,7 +178,7 @@ void set_boundary_conditions(VischydroNode **asol, const DMDALocalInfo &info,
                              bool is_periodic) {
 
   if (is_periodic == true) {
-    return; // Boundary conditions are handled automatically by PETSc
+    return; // Boundary conditions are handled automatically by PETSc DMDA
   }
 
   PetscInt ixs = info.xs;
@@ -192,24 +232,32 @@ void set_boundary_conditions(VischydroNode **asol, const DMDALocalInfo &info,
   }
 }
 
-// Presently this function take in E,M and returns dE/dt and dM/dt
-// NOTE TO SELF: Need to change this to primitive variable e
+// Compute the right-hand side function for the Euler equations using the KT
+// scheme. The function G is computed from the current state U (a vector of the
+// conserved variables on the charge grid) and G (also a vector on the charge
+// grid) holds dQ/dt at time t. The context ctx contains a pointer to the
+// Vischydro object that holds the simulation parameters and state.
 PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
+
+  PetscLogEvent event;
+  PetscLogEventRegister("EulerRHSFunction", 0, &event);
+  PetscLogEventBegin(event, 0, 0, 0, 0);
+
   const Vischydro &run = *(Vischydro *)ctx;
   auto &eos = *run.eos;
 
+  PetscCall(TransferQGridToSolution(run.qdomain, U, run.domain, run.solution));
+
   // Zero out the rhs vector and get pointer to local array
   VecZeroEntries(G);
-  VischydroNode **ag;
-  PetscCall(DMDAVecGetArray(run.domain, G, &ag));
+  VischydroQNode **ag;
+  PetscCall(DMDAVecGetArray(run.qdomain, G, &ag));
 
   // Copy the global solution to local solutions including the boundary values
-  PetscCall(DMGlobalToLocal(run.domain, U, INSERT_VALUES, run.local_solution));
+  PetscCall(DMGlobalToLocal(run.domain, run.solution, INSERT_VALUES,
+                            run.local_solution));
   VischydroNode **asol;
   PetscCall(DMDAVecGetArray(run.domain, run.local_solution, &asol));
-  // VischydroNode **asol_last;
-  // PetscCall(DMDAVecGetArray(run.domain, run.local_solution_last,
-  // &asol_last));
 
   // Get the grid information
   DMDALocalInfo info;
@@ -370,27 +418,40 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   // PetscCall(
   //     DMDAVecRestoreArray(run.domain, run.local_solution_last, &asol_last));
   PetscCall(DMDAVecRestoreArray(run.domain, run.local_solution, &asol));
-  PetscCall(DMDAVecRestoreArray(run.domain, G, &ag));
+  PetscCall(DMDAVecRestoreArray(run.qdomain, G, &ag));
+  PetscLogEventEnd(event, 0, 0, 0, 0);
 
   return 0;
 }
-PetscErrorCode PreStepInversion(TS ts) {
-  std::cout << "PreStepInversion" << std::endl;
+
+// PreStep function to transfer solution from solution vector to qsolution which
+// is used by the TS solver.
+PetscErrorCode PreStep(TS ts) {
+
+  Vischydro *run = nullptr;
+  TSGetApplicationContext(ts, &run);
+
+  Vec Y = nullptr;
+  TSGetSolution(ts, &Y);
+  TransferSolutionToQGrid(run->domain, run->solution, run->qdomain, Y);
   return 0;
 }
 
+// PostStep function to transfer solution from qsolution used by the TS solver
+// back to solution vector. This happens after each time step. Then the
+// primitives are recovered in the solution vector.
 PetscErrorCode PostStepInversion(TS ts) {
-  std::cout << "PostStepInversion" << std::endl;
   Vischydro *runptr = nullptr;
   TSGetApplicationContext(ts, &runptr);
   Vischydro &run = *runptr;
 
   Vec Y = nullptr;
   TSGetSolution(ts, &Y);
+  TransferQGridToSolution(run.qdomain, Y, run.domain, run.solution);
+
+  // Recover the primitives
   VischydroNode **au;
-  PetscCall(DMDAVecGetArray(run.domain, Y, &au));
-  VischydroNode **au_last;
-  PetscCall(DMDAVecGetArray(run.domain, run.solution, &au_last));
+  PetscCall(DMDAVecGetArray(run.domain, run.solution, &au));
 
   int ixs, ixm, jys, jym;
   DMDAGetCorners(run.domain, &ixs, &jys, NULL, &ixm, &jym, NULL);
@@ -401,24 +462,26 @@ PetscErrorCode PostStepInversion(TS ts) {
         findstate_problem("PostStepInversion", i, j, au[j][i], au[j][i],
                           *run.eos);
       }
-      au_last[j][i] = au[j][i];
     }
   }
-  PetscCall(DMDAVecRestoreArray(run.domain, Y, &au));
-  PetscCall(DMDAVecRestoreArray(run.domain, run.solution, &au_last));
+  PetscCall(DMDAVecRestoreArray(run.domain, run.solution, &au));
   return 0;
 }
 
+// PostStage function to transfer solution from qsolution used by the TS solver
+// back to solution vector. This happens after each stage of the solver. Then
+// the primitives are recovered in the solution vector.
 PetscErrorCode PostStageInversion(TS ts, PetscReal stagetime,
                                   PetscInt stageindex, Vec *Y) {
-  std::cout << "PostStageInversion at stage " << stageindex << " time "
-            << stagetime << std::endl;
   Vischydro *runptr = nullptr;
   TSGetApplicationContext(ts, &runptr);
   Vischydro &run = *runptr;
 
+  TransferQGridToSolution(run.qdomain, Y[stageindex], run.domain, run.solution);
+
+  // Recover the primitives
   VischydroNode **au;
-  PetscCall(DMDAVecGetArray(run.domain, Y[stageindex], &au));
+  PetscCall(DMDAVecGetArray(run.domain, run.solution, &au));
 
   int ixs, ixm, jys, jym;
   DMDAGetCorners(run.domain, &ixs, &jys, NULL, &ixm, &jym, NULL);
@@ -432,13 +495,16 @@ PetscErrorCode PostStageInversion(TS ts, PetscReal stagetime,
       }
     }
   }
-  PetscCall(DMDAVecRestoreArray(run.domain, Y[stageindex], &au));
+  PetscCall(DMDAVecRestoreArray(run.domain, run.solution, &au));
   return 0;
 }
 
+// Evaluate the inverse susceptibility matrix at a vertex given the four
+// surrounding nodes
 void evaluate_vertex_chiinv(const VischydroNode &n00, const VischydroNode &n01,
                             const VischydroNode &n10, const VischydroNode &n11,
                             const EOS &eos, std::array<double, 36> &chiinv_d) {
+
   MDSpan<double, 4, 9> chiinv(chiinv_d.data());
   // Create an array of node references for the four surrounding nodes
   std::array<std::reference_wrapper<const VischydroNode>, 4> nds{n00, n01, n10,
@@ -454,6 +520,7 @@ void evaluate_vertex_chiinv(const VischydroNode &n00, const VischydroNode &n01,
   return;
 }
 
+// Evaluate kappa at a vertex given the four surrounding nodes
 void evaluate_vertex_k(const VischydroNode &n00, const VischydroNode &n01,
                        const VischydroNode &n10, const VischydroNode &n11,
                        const EOS &eos, double &knn,
@@ -473,64 +540,9 @@ void evaluate_vertex_k(const VischydroNode &n00, const VischydroNode &n01,
   vhnode_kappa(nv, eos, knn, knx_d, kxx_d);
 }
 
-void evaluate_vertex_kderivative(
-    const VischydroNode &n00, const VischydroNode &n01,
-    const VischydroNode &n10, const VischydroNode &n11, const EOS &eos,
-    double &knn, std::array<double, 4> &knx_d, std::array<double, 16> &kxx_d,
-    std::array<double, 3> &knn_deriv_d, std::array<double, 4 * 3> &knx_deriv_d,
-    std::array<double, 16 * 3> &kxx_deriv_d) {
-  // Average state at the vertex
-  VischydroNode nv{};
-  nv.E = 0.25 * (n00.E + n01.E + n10.E + n11.E);
-  nv.M[0] = 0.25 * (n00.M[0] + n01.M[0] + n10.M[0] + n11.M[0]);
-  nv.M[1] = 0.25 * (n00.M[1] + n01.M[1] + n10.M[1] + n11.M[1]);
-  double e = 0.25 * (n00.e + n01.e + n10.e + n11.e);
-  bool ok = vhnode_findstate(e, nv, eos);
-  if (!ok) {
-    nv.e = e;
-    findstate_problem("evaluate_vertex_kderivative", -1, -1, nv, nv, eos);
-  }
-  vhnode_kappa(nv, eos, knn, knx_d, kxx_d);
-
-  VischydroNode nvp(nv); // Store the unperturbed state
-  double knnp = 0.0;
-  std::array<double, 4> knxp{};
-  std::array<double, 16> kxxp{};
-
-  MDSpan<double, 3> knn_deriv(knn_deriv_d.data());
-  MDSpan<double, 4, 3> knx_deriv(knx_deriv_d.data());
-  MDSpan<double, 16, 3> kxx_deriv(kxx_deriv_d.data());
-
-  for (int c = 0; c < 3; c++) {
-    // Perturb in direction c
-    VischydroNode nvp(nv);
-    double delta = 1e-6;
-    double dQ = (nv.E + nv.p) * delta;
-    if (c == 0) {
-      nvp.E = nv.E + dQ;
-    } else if (c == 1) {
-      nvp.M[0] = nv.M[0] + dQ;
-    } else if (c == 2) {
-      nvp.M[1] = nv.M[1] + dQ;
-    }
-    bool ok = vhnode_findstate(e, nvp, eos);
-    if (!ok) {
-      nvp.e = e;
-      findstate_problem("evaluate_vertex_kderivative", -1, -1, nvp, nvp, eos);
-    }
-    vhnode_kappa(nvp, eos, knnp, knxp, kxxp);
-
-    // The factor of 0.25 the four nodes contributing to the vertex
-    knn_deriv(c) = 0.25 * (knnp - knn) / dQ;
-    for (int a = 0; a < 4; a++) {
-      knx_deriv(a, c) = 0.25 * (knxp[a] - knx_d[a]) / dQ;
-    }
-    for (int a = 0; a < 16; a++) {
-      kxx_deriv(a, c) = 0.25 * (kxxp[a] - kxx_d[a]) / dQ;
-    }
-  }
-}
-
+// Returns the derivatave matrix used in the finite difference calculations for
+// the vertex-centered quantities. Here dx and dy are the grid spacings in the x
+// and y directions, respectively.
 void get_derivative_matrix(const double &dx, const double &dy,
                            std::array<double, 8> &Dx_d) {
   double tdx = 2 * dx;
@@ -541,19 +553,26 @@ void get_derivative_matrix(const double &dx, const double &dy,
   return;
 }
 
+// LHS implicit function for the viscous hydro equations. See notes for
+// expalanation.
 PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
                              void *context) {
+
+  PetscLogEvent event;
+  PetscLogEventRegister("LHSIFunction2", 0, &event);
+  PetscLogEventBegin(event, 0, 0, 0, 0);
 
   // This is just copying udot to F. F is updated below
   VecCopy(udot, F);
 
   auto run = (Vischydro *)context;
 
+  // Transfer the solution vector u, which is on the q-grid to the solution grid
+  TransferQGridToSolution(run->qdomain, u, run->domain, run->solution);
+
   // Do communcation and fill up boundary cells fillin local_solution based on u
-  PetscCall(
-      DMGlobalToLocalBegin(run->domain, u, INSERT_VALUES, run->local_solution));
-  PetscCall(
-      DMGlobalToLocalEnd(run->domain, u, INSERT_VALUES, run->local_solution));
+  PetscCall(DMGlobalToLocal(run->domain, run->solution, INSERT_VALUES,
+                            run->local_solution));
 
   // Local array with the boundary cells
   VischydroNode **au;
@@ -567,7 +586,7 @@ PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
   int ixs, ixm, jys, jym;
   DMDAGetCorners(run->domain, &ixs, &jys, 0, &ixm, &jym, 0);
 
-  // Loop over the grid and call idealHydroCellSolve
+  // Loop over the grid and call findstate to ensure primitives are recovered
   for (int j = jys - 1; j < jys + jym + 1; j++) {
     for (int i = ixs - 1; i < ixs + ixm + 1; i++) {
       bool ok = vhnode_findstate(au[j][i].e, au[j][i], *run->eos);
@@ -599,8 +618,10 @@ PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
   std::array<int, 4> is = {0, 1, 0, 1};
   std::array<int, 4> js = {0, 0, 1, 1};
 
-  VischydroNode **aF;
-  PetscCall(DMDAVecGetArray(run->domain, F, &aF));
+  // This is the vector that holds the LHS function
+  VischydroQNode **aF;
+  PetscCall(DMDAVecGetArray(run->qdomain, F, &aF));
+
   for (int j = jys - 1; j < jys + jym; j++) {
     for (int i = ixs - 1; i < ixs + ixm; i++) {
 
@@ -648,26 +669,48 @@ PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
       }
     }
   }
-  PetscCall(DMDAVecRestoreArray(run->domain, F, &aF));
+  PetscCall(DMDAVecRestoreArray(run->qdomain, F, &aF));
   PetscCall(DMDAVecRestoreArray(run->domain, run->local_solution, &au));
+  PetscLogEventEnd(event, 0, 0, 0, 0);
   return 0;
 }
+
 PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
                              PetscReal shift, Mat J, Mat P, void *context) {
+
+  PetscLogEvent event;
+  PetscLogEventRegister("LHSIJacobian2", 0, &event);
+  PetscLogEventBegin(event, 0, 0, 0, 0);
+
   auto run = (Vischydro *)context;
-  // Do communcation and fill up boundary cells
-  PetscCall(
-      DMGlobalToLocalBegin(run->domain, u, INSERT_VALUES, run->local_solution));
-  PetscCall(
-      DMGlobalToLocalEnd(run->domain, u, INSERT_VALUES, run->local_solution));
+
+  TransferQGridToSolution(run->qdomain, u, run->domain, run->solution);
+
+  // Do communcation and fill up boundary cells fillin local_solution based on u
+  PetscCall(DMGlobalToLocal(run->domain, run->solution, INSERT_VALUES,
+                            run->local_solution));
 
   // Local array with the boundary cells
   VischydroNode **au;
   PetscCall(DMDAVecGetArray(run->domain, run->local_solution, &au));
 
+  // Get the grid information
   DMDALocalInfo info;
   PetscCall(DMDAGetLocalInfo(run->domain, &info));
   set_boundary_conditions(au, info, run->has_periodic_bc());
+
+  int ixs, ixm, jys, jym;
+  DMDAGetCorners(run->domain, &ixs, &jys, 0, &ixm, &jym, 0);
+
+  // Loop over the grid and call idealHydroCellSolve
+  for (int j = jys - 1; j < jys + jym + 1; j++) {
+    for (int i = ixs - 1; i < ixs + ixm + 1; i++) {
+      bool ok = vhnode_findstate(au[j][i].e, au[j][i], *run->eos);
+      if (!ok) {
+        findstate_problem("LHSIFunction2", i, j, au[j][i], au[j][i], *run->eos);
+      }
+    }
+  }
 
   double dx = run->get_dx();
   double dy = run->get_dy();
@@ -675,19 +718,6 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
   // Is this needed?
   PetscCall(MatZeroEntries(P));
   PetscCall(MatShift(P, shift));
-
-  int ixs, ixm, jys, jym;
-  DMDAGetCorners(run->domain, &ixs, &jys, 0, &ixm, &jym, 0);
-
-  // Loop over the grid so that the local au[j][i] cells are complete
-  for (int j = jys - 1; j < jys + jym + 1; j++) {
-    for (int i = ixs - 1; i < ixs + ixm + 1; i++) {
-      bool ok = vhnode_findstate(au[j][i].e, au[j][i], *run->eos);
-      if (!ok) {
-        findstate_problem("LHSIJacobian2", i, j, au[j][i], au[j][i], *run->eos);
-      }
-    }
-  }
 
   MatStencil row{};
   std::array<MatStencil, 12> columns_d{};
@@ -714,9 +744,10 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
   std::array<int, 4> is = {0, 1, 0, 1};
   std::array<int, 4> js = {0, 0, 1, 1};
 
-  // Evaluate the main part
   for (int j = jys - 1; j < jys + jym; j++) {
     for (int i = ixs - 1; i < ixs + ixm; i++) {
+
+      // This call is 10% of the event loop
       evaluate_vertex_k(au[j][i], au[j][i + 1], au[j + 1][i], au[j + 1][i + 1],
                         *run->eos, knn, knx_d, kxx_d);
 
@@ -800,39 +831,11 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
     MatAssemblyBegin(J, MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(J, MAT_FINAL_ASSEMBLY);
   }
+  PetscLogEventEnd(event, 0, 0, 0, 0);
 
   return 0;
 }
 
-// PetscErrorCode PetscOptionsCXXBool(const char name[], const char help[],
-// const char def[], bool &value, bool *set) {
-//   PetscBool petsc_value = value ? PETSC_TRUE : PETSC_FALSE;
-//   PetscCall(PetscOptionsBool(name, help, def, petsc_value, &petsc_value,
-//   set)); value = (petsc_value == PETSC_TRUE) ? true : false; return 0;
-// }
-PetscErrorCode Vischydro::set_petsc_options() {
-  // PetscOptionsBegin(PETSC_COMM_WORLD, "vhydro_", "Viscous Hydrodynamics
-  // options",
-  //                   NULL);
-
-  // PetscBool bj = is_bjorken ? PETSC_TRUE : PETSC_FALSE;
-  // PetscCall(PetscOptionsBool(
-  //     "-is_bjorken", "Enable Bjorken expansion source terms", "",
-  //     bj, &bj, NULL));
-  // double CFL = 0.8;
-  // PetscCall(PetscOptionsReal(
-  //     "-cfl_max", "Maximum CFL number for time step control", "", cfl,
-  //     &cfl, NULL));
-
-  // PetscCall(PetscOptionsBool("-highest_order_term_only",
-  //                            "Use only highest order term in Jacobian",
-  //                            "", highest_order_term_only,
-  //                            &highest_order_term_only, NULL));
-
-  // Add options here in the future
-  // PetscOptionsEnd();
-  return 0;
-}
 Vischydro::Vischydro(nlohmann::json &config, const EOS *eosin) : eos(eosin) {
 
   // Extract parameters from JSON
@@ -847,22 +850,20 @@ Vischydro::Vischydro(nlohmann::json &config, const EOS *eosin) : eos(eosin) {
     std::cerr << "Error parsing configuration JSON: " << e.what() << std::endl;
     std::abort();
   }
-  // set_petsc_options();
+  nlohmann::json defaults = {
+      {"cfl_max", 0.9},
+      {"is_bjorken", true},
+      {"is_periodic", true},
+      {"use_ideal_step_only", false},
+      {"highest_order_term_only", false},
+  };
+  defaults.update(config);
 
-  // Set options from JSON, with defaults
-  cfl = config.value("cfl_max", 0.8);
-  is_bjorken = config.value("is_bjorken", true);
-  is_periodic = config.value("is_periodic", true);
-  use_ideal_step_only = config.value("use_ideal_step_only", false);
-  highest_order_term_only = config.value("highest_order_term_only", false);
-
-  // cfl = config.at("cfl_max").get<double>();
-  // is_bjorken = config.at("is_bjorken").get<bool>();
-  // is_periodic = config.at("is_periodic").get<bool>();
-  // use_ideal_step_only = config.at("use_ideal_step_only").get<bool>();
-  // highest_order_term_only =
-  //     config.at("highest_order_term_only").get<bool>();
-
+  cfl = defaults.at("cfl_max").get<double>();
+  is_bjorken = defaults.at("is_bjorken").get<bool>();
+  is_periodic = defaults.at("is_periodic").get<bool>();
+  use_ideal_step_only = defaults.at("use_ideal_step_only").get<bool>();
+  highest_order_term_only = defaults.at("highest_order_term_only").get<bool>();
   double Lx = xmax - xmin;
   double Ly = ymax - ymin;
 
@@ -884,25 +885,34 @@ Vischydro::Vischydro(nlohmann::json &config, const EOS *eosin) : eos(eosin) {
   DMSetUp(domain);
   DMCreateGlobalVector(domain, &solution);
   DMCreateLocalVector(domain, &local_solution);
-  VecDuplicate(local_solution, &local_solution_last);
+
+  // Create a domain and vector for the charges only. This is what the time
+  // stepper will work on.
+  DMDACreateCompatibleDMDA(domain, VischydroNode::Ncharge, &qdomain);
+  DMCreateGlobalVector(qdomain, &qsolution);
 
   // Set coordinates
   DMDASetUniformCoordinates(domain, xmin, xmax, ymin, ymax, 0.0, 0.0);
   DMGetCoordinates(domain, &coordinates);
   DMGetCoordinateDM(domain, &cdomain);
 
+  // Create the time stepper object of PETSc.
+  // We note that the time stepper will work on the qdomain and qsolution
+  // which only contains the charges needed for the hydrodynamics evolution.
   TSCreate(PETSC_COMM_WORLD, &stepper);
   TSSetApplicationContext(stepper, this);
-  TSSetDM(stepper, domain);
-  TSSetTimeStep(stepper, get_default_time_step());
+  TSSetDM(stepper, qdomain);
+  TSSetSolution(stepper, qsolution);
 
   // Simplest possible time step adaptivity: no adaptivity
+  TSSetTimeStep(stepper, get_default_time_step());
   TSAdapt adapt;
   TSGetAdapt(stepper, &adapt);
   TSAdaptSetType(adapt, TSADAPTNONE);
   TSSetExactFinalTime(stepper, TS_EXACTFINALTIME_STEPOVER);
 
-  TSSetPreStep(stepper, PreStepInversion);
+  // Set the hooks for pre-step, post-step, and post-stage
+  TSSetPreStep(stepper, PreStep);
   TSSetPostStep(stepper, PostStepInversion);
   TSSetPostStage(stepper, PostStageInversion);
 
@@ -913,27 +923,31 @@ Vischydro::Vischydro(nlohmann::json &config, const EOS *eosin) : eos(eosin) {
     return;
   } else {
 
-    //
     TSSetType(stepper, TSEIMEX);
-    TSSetSolution(stepper, solution);
     TSSetRHSFunction(stepper, NULL, EulerRHSFunction, this);
 
-    DMCreateGlobalVector(domain, &Residual);
-    DMCreateMatrix(domain, &Jacobian);
+    DMCreateGlobalVector(qdomain, &Residual);
+    DMCreateMatrix(qdomain, &Jacobian);
 
     TSSetIFunction(stepper, Residual, LHSIFunction2, this);
     TSSetIJacobian(stepper, Jacobian, Jacobian, LHSIJacobian2, this);
 
     // Allow for a couple of failed iterations before giving up
     PetscCallVoid(TSSetMaxSNESFailures(stepper, 5));
-    // // Not sure we need this. This forces
-    // // at least one iteration of the solver
-    // SNES snes;
-    // TSGetSNES(stepper, &snes);
-    // SNESSetForceIteration(snes, PETSC_TRUE);
-    // SNESSetFromOptions(snes);
-
     TSSetFromOptions(stepper);
   }
+}
+
+Vischydro::~Vischydro() {
+  if (not use_ideal_step_only) {
+    VecDestroy(&Residual);
+    MatDestroy(&Jacobian);
+  }
+  TSDestroy(&stepper);
+  VecDestroy(&qsolution);
+  DMDestroy(&qdomain);
+  VecDestroy(&local_solution);
+  VecDestroy(&solution);
+  DMDestroy(&domain);
 }
 } // namespace DFHydro

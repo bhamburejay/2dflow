@@ -28,6 +28,9 @@ target_link_libraries(test_fillnode_kappa.exe PkgConfig::PETSC ${HDF5_LIBRARIES}
 add_executable(test_petsc_opts.exe ./test_petsc_opts.cpp)
 target_link_libraries(test_petsc_opts.exe PkgConfig::PETSC)
 
+add_executable(test_grid_transfer.exe ./test_grid_transfer.cpp ${SOURCES})
+target_link_libraries(test_grid_transfer.exe PkgConfig::PETSC)
+
 # Add the main executable and necessary scripts
 configure_file(./vischydro.py ./vischydro.py)
 configure_file(./VischydroMainRun.py ./VischydroMainRun.py)

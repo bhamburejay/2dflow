@@ -1,10 +1,10 @@
 #ifndef Vischydro_impl_hpp
 #define Vischydro_impl_hpp
 
-#include <numeric>
-#include <petscdmda.h>
-#include <petsc.h>
 #include "VischydroNode.hpp"
+#include <numeric>
+#include <petsc.h>
+#include <petscdmda.h>
 
 namespace DFHydro {
 class limitter {
@@ -34,7 +34,19 @@ public:
   limitter(const int &imethod = limitter::kCenteredMinMod) : method(imethod){};
 };
 
-void set_boundary_conditions(VischydroNode **asol,
-                             const DMDALocalInfo &info, bool is_periodic) ;
-}
+void set_boundary_conditions(VischydroNode **asol, const DMDALocalInfo &info,
+                             bool is_periodic);
+
+struct VischydroQNode {
+  double E;
+  double M[2];
+};
+
+PetscErrorCode TransferSolutionToQGrid(const DM &domain, const Vec &solution,
+                                       const DM &qdomain, const Vec &qsolution);
+
+PetscErrorCode TransferQGridToSolution(const DM &qdomain, const Vec &qsolution,
+                                       const DM &domain, const Vec &solution);
+
+} // namespace DFHydro
 #endif // Vischydro_impl_hpp

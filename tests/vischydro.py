@@ -1,3 +1,28 @@
+# vischydro module for setting up and running the VischydroMain.exe code
+""" Vischydro module for setting up and running the VischydroMain.exe code
+
+This module provides functions to set the input parameters neeeded to run the VischydoroMain.exe code, create initial data grids, and run the simulation. 
+
+The user simply imports the vischydro module, modifies the input_data dictionary as needed, creates an initial data grid, and then calls the runcode function to execute the simulation.  
+
+Example usage:
+
+import vischydro
+
+# Modify the input parameters
+vischydro.input_data["Vischydro/nx"] = 200
+
+# Create an initial data grid this will be a numpy array of shape (ny, nx, ndof)
+initialdata = vischydro.initialdata_grid(vischydro.input_data)
+
+# Fill in the initialdata array as needed...
+
+# Run the vischydro simulation
+vischydro.runcode(initialdata, vischydro.input_data, runcommand='./VischydroMain.exe')
+
+# This launches the vischydro code with the specified initial data and input parameters.
+"""
+
 import json
 from collections import UserDict
 import subprocess
@@ -8,7 +33,7 @@ import matplotlib.pyplot as plt
 import pdb
 
 
-# inputs for the vischydro code
+
 _input_data = {
     "Vischydro": {
         "nx": 80,
@@ -38,8 +63,16 @@ _input_data = {
     }
 }
 
-
 class FixedData(UserDict):
+    """ This is a dictionary helper classes that does not allow adding new keys,
+    preveningt typos. 
+
+    It also allows accessing nested dictionary elements using
+    a single keystring with '/' separators. For example, to access the value of
+    key 'key3' in nested dictionary {'key1': {'key2': {'key3': value}}}, one can
+    use the keystring mydict['key1/key2/key3'].  The class checks that each key
+    exists and does not allow adding new keys. """
+
     def __init__(self, initialdata):
         # super().__init__(initialdata)
         self.data = initialdata
@@ -47,7 +80,7 @@ class FixedData(UserDict):
     def __setitem__(self, key, value):
         """ Navigate the nested dictionary using the provided keystring
         checking that each key exists before setting the value to v. The format
-        of keystring is 'key1/key2/key3' for nested dictionaries. """
+        of keystring is mydict['key1/key2/key3'] for nested dictionaries. """
         keystring = key.split('/')
         name = keystring[-1]
         d = self.data
@@ -73,12 +106,30 @@ class FixedData(UserDict):
 
 
 input_data = FixedData(_input_data)
+""" A dictionary holding the default input parameters for the vischydro code.
+This can be modified by the user as needed before running the simulation. This
+is just a nested dictionary. 
+
+Example usage:
+
+import vischydro
+vischydro.input_data["Vischydro/nx"] = 200
+
+print(vischydro.input_data) 
+"""
+
 
 # Create a Vischydro of xy values based on the input_data dictionary
 
 
 def xygrid(input_data):
-    # create an array of linear spaced input_data with NX points between xmin and xmax
+    """ Create the Vischydro coordinate grid based on the input data. 
+
+    Returns:
+    xarray, yarray, dx, dy : np.ndarray, np.ndarray, float, float
+        The one dimensional x and y coordinate arrays, and the grid spacings dx and dy.
+    """
+    
     xmin = input_data['Vischydro']['xmin']
     xmax = input_data['Vischydro']['xmax']
     ymin = input_data['Vischydro']['ymin']
@@ -96,7 +147,8 @@ def xygrid(input_data):
 
 
 def initialdata_grid(input_data):
-    # Creates a grid to hold the intiial data
+    """ Create an initialdata grid based on the input data. The initialdata grid is a numpy array of shape (ny, nx, ndof) filled with zeros."""
+    
     nx = input_data['Vischydro']['nx']
     ny = input_data['Vischydro']['ny']
     ndof = input_data['Vischydro']['ndof']

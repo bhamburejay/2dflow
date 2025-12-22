@@ -10,8 +10,6 @@ runcommand  = 'mpiexec-mpich-clang17 -n 1 ./VischydroMain.exe'
    
 #runcommand = 'mpiexec -n 4 ./VischydroMain.exe'
 
-def getnames2d(fourpietabys, gaussian_const, gaussian_amplitude, gaussian_width):
-    return 'simple_bj2d_example'
 
 def runbj2d(fourpietabys, gaussian_const, gaussian_amplitude, gaussian_width, tmin, tmax, petsc_args='', actually_run=True):
     # These are the inputs that must be passed to the vischydro code through an inputfile in the json format.  You can modify these as needed to change the grid size, tstart and stop times, etc.
@@ -22,9 +20,9 @@ def runbj2d(fourpietabys, gaussian_const, gaussian_amplitude, gaussian_width, tm
     w = gaussian_width
     fourpietabys = fourpietabys
 
-    name = getnames2d(fourpietabys, delta, A, w)
+    name = 'simple_bj2d_example'
 
-    # Here will run an example in cartesian
+    # Here will run an example in cartesian with Bjorken expansion
     vischydro.input_data["Vischydro/nx"] = 150 
     vischydro.input_data["Vischydro/xmin"] = -15.0
     vischydro.input_data["Vischydro/xmax"] = 15.0

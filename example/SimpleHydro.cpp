@@ -41,6 +41,8 @@ void simple_initialize(Vischydro &vischydro) {
 
       // std::cout << "Grid point (" << i << "," << j << ") : (x,y)=(" << x << "," << y << ")  (" << xs << "," << ys << ")" <<std::endl;
 
+      // One should specify the energy density and fluid velocity, e, u^i
+      // The rest of the VischydroNode fields will be filled in by vhnode_fill
       double r2 = x * x + y * y;
       asol[j][i].e = exp(-r2/(2.* sigma*sigma)) * emax + emin;
       asol[j][i].u[0] = 0.0;
@@ -96,11 +98,11 @@ PetscErrorCode RunCode() {
   // You can also read this from a file.
   nlohmann::json input = nlohmann::json::parse(R"({  
         "nx": 120,
-        "ny": 120, 
+        "ny": 150, 
         "xmin": -20.0,
         "xmax": 20.0,
-        "ymin": -15.0,
-        "ymax": 15.0 
+        "ymin": -18.0,
+        "ymax": 18.0 
   })");
 
   std::ofstream out("simple_output.txt");

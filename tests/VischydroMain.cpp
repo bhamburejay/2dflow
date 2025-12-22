@@ -1,6 +1,8 @@
 #include "Vischydro.hpp"
+#include "Vischydro_impl.hpp"
 #include <fstream>
 #include <iostream>
+
 #include <petscviewerhdf5.h>
 
 using namespace DFHydro;
@@ -59,8 +61,9 @@ PetscErrorCode VischydroGridMonitor(TS ts, PetscInt step, PetscReal time, Vec u,
 
   if (step % monitor->print_frequency == 0) {
     PetscPrintf(PETSC_COMM_WORLD, "Time, Step: %f %d \n", time, step);
-    PetscObjectSetName((PetscObject)u, "solution");
-    VecView(u, monitor->H5viewer);
+    auto &solution = monitor->run->solution;
+    PetscObjectSetName((PetscObject)solution, "solution");
+    VecView(solution, monitor->H5viewer);
     // Increment the timestep for the hdf5file
     PetscViewerHDF5IncrementTimestep(monitor->H5viewer);
 
@@ -97,7 +100,7 @@ PetscErrorCode RunCode() {
   std::unique_ptr<EOS> eos =
       std::make_unique<ViscousQGP>(3., 0, etabys_in, zetabys_in);
 
-  // Initialize the EOS
+  // Initialize the hydro
   std::unique_ptr<Vischydro> vischydro =
       std::make_unique<Vischydro>(input.at("Vischydro"), eos.get());
 
@@ -129,12 +132,6 @@ PetscErrorCode RunCode() {
     std::cout << "final_time: " << t_end << std::endl;
   }
 
-  TSSetTime(vischydro->stepper, t_start);
-  TSSetTimeStep(vischydro->stepper, dt);
-  TSSetMaxTime(vischydro->stepper, t_end);
-  TSSetExactFinalTime(vischydro->stepper, TS_EXACTFINALTIME_STEPOVER);
-  TSSetFromOptions(vischydro->stepper);
-
   // Check the -help option to print out the input file structure
   PetscBool help = PETSC_FALSE;
   PetscOptionsGetBool(NULL, NULL, "-help", &help, NULL);
@@ -148,7 +145,7 @@ PetscErrorCode RunCode() {
     return 0;
   }
 
-  TSSolve(vischydro->stepper, vischydro->solution);
+  vischydro->solve(t_start, t_end, dt);
 
   // Save the final state
   if (rank == 0) {

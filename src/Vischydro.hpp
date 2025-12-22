@@ -23,18 +23,7 @@ public:
   Vec coordinates;
 
   Vischydro(nlohmann::json &config, const EOS *eosin);
-
-  ~Vischydro() {
-    if (not use_ideal_step_only) {
-      VecDestroy(&Residual);
-      MatDestroy(&Jacobian);
-    }
-    TSDestroy(&stepper);
-    VecDestroy(&local_solution);
-    VecDestroy(&local_solution_last);
-    VecDestroy(&solution);
-    DMDestroy(&domain);
-  }
+  ~Vischydro();
 
   // Save the current grid to a file using HDF5. The filename is optional and
   // defaults to output.h5
@@ -61,22 +50,25 @@ public:
   double get_ymax() const { return ymax; }
   int get_nx() const { return nx; }
   int get_ny() const { return ny; }
+
+  double get_cfl() const { return cfl; }
+  double get_default_time_step() const { return cfl * std::min(dx, dy); }
+  void solve(double t1, double t2, double dt);
+
+  // The following are accessors for various options
+  bool use_only_ideal_step() const { return use_ideal_step_only; }
   bool is_bjorken_expansion() const { return is_bjorken; }
   bool get_highest_order_term_only() const {
     return bool(highest_order_term_only);
   }
   bool has_periodic_bc() const { return is_periodic; }
-  double get_cfl() const { return cfl; }
-  double get_default_time_step() const { return cfl * std::min(dx, dy); }
-
-  void solve(double t1, double t2, double dt);
 
 public:
   Vec local_solution;
-  Vec local_solution_last;
+  DM qdomain;
+  Vec qsolution;
 
 private:
-  nlohmann::json options;
   int nx;
   int ny;
   double dx;
@@ -92,7 +84,6 @@ private:
   bool is_periodic;
   Vec Residual;
   Mat Jacobian;
-  PetscErrorCode set_petsc_options();
 };
 } // namespace DFHydro
 
