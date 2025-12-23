@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.24)
 
 # Set the project name
 project(DFHydro)
@@ -17,15 +17,17 @@ endif (CXX_COMPILER)
 
 find_package(PkgConfig REQUIRED) 
 pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc)
+# Make an alias for PETSc instead of using PkgConfig::PETSC everywhere
+add_library(PETSc ALIAS PkgConfig::PETSC)
+
 
 option(PETSC_HAS_HDF5 "PETSc built with HDF5 support" OFF) 
-
 # Check for HDF5 support in PETSc
 if (PETSC_HAS_HDF5)
     message(STATUS "PETSc built with HDF5 support")
     add_compile_definitions(PETSC_HAVE_HDF5)
-    find_package(HDF5 REQUIRED)
-    include_directories(${HDF5_INCLUDE_DIRS})
+    #find_package(HDF5 REQUIRED)
+    #include_directories(${HDF5_INCLUDE_DIRS})
 else()
     message(STATUS "PETSc not built with HDF5 support")
 endif()
