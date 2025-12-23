@@ -36,15 +36,7 @@ import pdb
 
 _input_data = {
     "Vischydro": {
-        "nx": 80,
-        "ny": 90,
-        "xmin": -8.0,
-        "xmax": 8.0,
-        "ymin": -9.0,
-        "ymax": 9.0,
-
         # These are defaults and should not normally be changed
-        "ndof": 9,
         "cfl_max": 0.8,
         "is_bjorken": True,
         "highest_order_term_only": True, 
@@ -52,6 +44,13 @@ _input_data = {
         "is_periodic": False
     },
     "VischydroMain": {
+        "ndof": 9,
+        "nx": 80,
+        "ny": 90,
+        "xmin": -8.0,
+        "xmax": 8.0,
+        "ymin": -9.0,
+        "ymax": 9.0,
         "print_frequency": 10,
         "t_start": 0.0,
         "t_end": 47.0,
@@ -113,7 +112,7 @@ is just a nested dictionary.
 Example usage:
 
 import vischydro
-vischydro.input_data["Vischydro/nx"] = 200
+vischydro.input_data["VischydroMain/nx"] = 200
 
 print(vischydro.input_data) 
 """
@@ -130,13 +129,13 @@ def xygrid(input_data):
         The one dimensional x and y coordinate arrays, and the grid spacings dx and dy.
     """
     
-    xmin = input_data['Vischydro']['xmin']
-    xmax = input_data['Vischydro']['xmax']
-    ymin = input_data['Vischydro']['ymin']
-    ymax = input_data['Vischydro']['ymax']
-    NX = input_data['Vischydro']['nx']
+    xmin = input_data['VischydroMain']['xmin']
+    xmax = input_data['VischydroMain']['xmax']
+    ymin = input_data['VischydroMain']['ymin']
+    ymax = input_data['VischydroMain']['ymax']
+    NX = input_data['VischydroMain']['nx']
     xarray = np.linspace(xmin, xmax, NX, endpoint=False)
-    NY = input_data['Vischydro']['ny']
+    NY = input_data['VischydroMain']['ny']
     yarray = np.linspace(ymin, ymax, NY, endpoint=False)
     dx = xarray[1] - xarray[0]
     dy = yarray[1] - yarray[0]
@@ -149,11 +148,11 @@ def xygrid(input_data):
 def initialdata_grid(input_data):
     """ Create an initialdata grid based on the input data. The initialdata grid is a numpy array of shape (ny, nx, ndof) filled with zeros."""
     
-    nx = input_data['Vischydro']['nx']
-    ny = input_data['Vischydro']['ny']
-    ndof = input_data['Vischydro']['ndof']
+    nx = input_data['VischydroMain']['nx']
+    ny = input_data['VischydroMain']['ny']
+    ndof = input_data['VischydroMain']['ndof']
     initialdata = np.zeros(
-        (input_data['Vischydro']['ny'], input_data['Vischydro']['nx'], input_data['Vischydro']['ndof']))
+        (input_data['VischydroMain']['ny'], input_data['VischydroMain']['nx'], input_data['VischydroMain']['ndof']))
     print("initialdata_grid:", "Created Vischydro coordinate grid based on the input data with nx =",
           nx, " ny =", ny, " ndof =", ndof)
     return initialdata
@@ -213,17 +212,17 @@ def runcode(initialdata, input_data, runcommand='./VischydroMain.exe', actually_
 # Swap the Vischydro dimensions for x and y
 def swap_xy(input_data):
     # swap nx and ny
-    nx = input_data['Vischydro']['nx']
-    ny = input_data['Vischydro']['ny']
-    input_data['Vischydro/nx'] = ny
-    input_data['Vischydro/ny'] = nx
+    nx = input_data['VischydroMain']['nx']
+    ny = input_data['VischydroMain']['ny']
+    input_data['VischydroMain/nx'] = ny
+    input_data['VischydroMain/ny'] = nx
     # swap xmin and ymin
-    xmin = input_data['Vischydro']['xmin']
-    ymin = input_data['Vischydro']['ymin']
-    input_data['Vischydro/xmin'] = ymin
-    input_data['Vischydro/ymin'] = xmin
+    xmin = input_data['VischydroMain']['xmin']
+    ymin = input_data['VischydroMain']['ymin']
+    input_data['VischydroMain/xmin'] = ymin
+    input_data['VischydroMain/ymin'] = xmin
     # swap xmax and ymax
-    xmax = input_data['Vischydro']['xmax']
-    ymax = input_data['Vischydro']['ymax']
-    input_data['Vischydro/xmax'] = ymax
-    input_data['Vischydro/ymax'] = xmax
+    xmax = input_data['VischydroMain']['xmax']
+    ymax = input_data['VischydroMain']['ymax']
+    input_data['VischydroMain/xmax'] = ymax
+    input_data['VischydroMain/ymax'] = xmax

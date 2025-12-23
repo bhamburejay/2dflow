@@ -1,12 +1,13 @@
-#ifndef VISCHYDRONODE_HPP
-#define VISCHYDRONODE_HPP
+#ifndef DFHYDRO_VISCHYDRONODE_HPP
+#define DFHYDRO_VISCHYDRONODE_HPP
 
-#include "DFHydroEOS.hpp"
+#include <DFHydro/DFHydroEOS.hpp>
 #include <array>
 #include <iostream>
 #include <petsc.h>
 
 namespace DFHydro {
+
 struct VischydroNode {
   static const int dim = 2;
   static const int Ncharge = 3;

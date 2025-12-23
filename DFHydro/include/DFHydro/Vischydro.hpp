@@ -1,12 +1,10 @@
-#ifndef VISCHYDRO_HPP
-#define VISCHYDRO_HPP
+#ifndef DFHYDRO_VISCHYDRO_HPP
+#define DFHYDRO_VISCHYDRO_HPP
 
-#include "DFHydroEOS.hpp"
-#include "VischydroNode.hpp"
+#include <DFHydro/DFHydroEOS.hpp>
+#include <DFHydro/VischydroNode.hpp>
 #include <nlohmann/json.hpp>
 #include <petsc.h>
-#include <petscdm.h>
-#include <petscdmda.h>
 #include <string>
 
 namespace DFHydro {
@@ -22,7 +20,11 @@ public:
   DM cdomain;
   Vec coordinates;
 
-  Vischydro(nlohmann::json &config, const EOS *eosin);
+  Vischydro(const int &nx, const double &xmin, const double &xmax,
+            const int &ny, const double &ymin, const double &ymax,
+            const EOS *eos,
+            const nlohmann::json &config = nlohmann::json::object());
+
   ~Vischydro();
 
   // Save the current grid to a file using HDF5. The filename is optional and

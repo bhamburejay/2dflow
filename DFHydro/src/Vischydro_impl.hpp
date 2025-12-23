@@ -1,8 +1,8 @@
 #ifndef Vischydro_impl_hpp
 #define Vischydro_impl_hpp
 
-#include <DFHydro/VischydroNode.hpp>
 #include <DFHydro/DFHydroEOS.hpp>
+#include <DFHydro/VischydroNode.hpp>
 #include <numeric>
 #include <petsc.h>
 #include <petscdmda.h>

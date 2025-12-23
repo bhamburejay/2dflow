@@ -99,8 +99,18 @@ PetscErrorCode RunCode() {
       std::make_unique<ViscousQGP>(3., 0, etabys_in, zetabys_in);
 
   // Initialize the hydro
+  int nx = input.at("VischydroMain").at("nx").get<int>();
+  int ny = input.at("VischydroMain").at("ny").get<int>();
+  double xmin = input.at("VischydroMain").at("xmin").get<double>();
+  double xmax = input.at("VischydroMain").at("xmax").get<double>();
+  double ymin = input.at("VischydroMain").at("ymin").get<double>();
+  double ymax = input.at("VischydroMain").at("ymax").get<double>();
+
+  nlohmann::json config =
+      input.value("Vischydro", nlohmann::json::object());
+
   std::unique_ptr<Vischydro> vischydro =
-      std::make_unique<Vischydro>(input.at("Vischydro"), eos.get());
+      std::make_unique<Vischydro>(nx, xmin, xmax, ny, ymin, ymax, eos.get(), config);
 
   std::string ic_filename = input.at("VischydroMain")
                                 .at("initial_conditions_filename")

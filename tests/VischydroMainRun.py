@@ -39,12 +39,12 @@ def runbj2d(fourpietabys, gaussian_const, gaussian_amplitude, gaussian_width, tm
     name = 'simple_bj2d_example'
 
     # Here will run an example in cartesian with Bjorken expansion
-    vischydro.input_data["Vischydro/nx"] = 150 
-    vischydro.input_data["Vischydro/xmin"] = -15.0
-    vischydro.input_data["Vischydro/xmax"] = 15.0
-    vischydro.input_data["Vischydro/ny"] = 150
-    vischydro.input_data["Vischydro/ymin"] = -15.0
-    vischydro.input_data["Vischydro/ymax"] = 15.0
+    vischydro.input_data["VischydroMain/nx"] = 150 
+    vischydro.input_data["VischydroMain/xmin"] = -15.0
+    vischydro.input_data["VischydroMain/xmax"] = 15.0
+    vischydro.input_data["VischydroMain/ny"] = 150
+    vischydro.input_data["VischydroMain/ymin"] = -15.0
+    vischydro.input_data["VischydroMain/ymax"] = 15.0
 
 
     vischydro.input_data["VischydroMain/eta_by_s"] = fourpietabys/(4.0*np.pi)

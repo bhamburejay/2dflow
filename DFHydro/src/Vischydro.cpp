@@ -4,11 +4,11 @@
 #ifdef PETSC_HAVE_HDF5
 #include <petscviewerhdf5.h>
 #endif
-#include <petscerror.h>
-#include <DFHydro/Vischydro.hpp>
-#include <DFHydro/DFHydroEOS.hpp>
 #include "DFHydroMDSpan.hpp"
 #include "Vischydro_impl.hpp"
+#include <DFHydro/DFHydroEOS.hpp>
+#include <DFHydro/Vischydro.hpp>
+#include <petscerror.h>
 
 namespace DFHydro {
 
@@ -836,20 +836,13 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
   return 0;
 }
 
-Vischydro::Vischydro(nlohmann::json &config, const EOS *eosin) : eos(eosin) {
+Vischydro::Vischydro(const int &nx_i, const double &xmin_i,
+                     const double &xmax_i, const int &ny_i,
+                     const double &ymin_i, const double &ymax_i,
+                     const EOS *eos_i, const nlohmann::json &config)
+    : eos(eos_i), nx(nx_i), xmin(xmin_i), xmax(xmax_i), ny(ny_i), ymin(ymin_i),
+      ymax(ymax_i) {
 
-  // Extract parameters from JSON
-  try {
-    nx = config.at("nx").get<int>();
-    ny = config.at("ny").get<int>();
-    xmin = config.at("xmin").get<double>();
-    xmax = config.at("xmax").get<double>();
-    ymin = config.at("ymin").get<double>();
-    ymax = config.at("ymax").get<double>();
-  } catch (nlohmann::json::exception &e) {
-    std::cerr << "Error parsing configuration JSON: " << e.what() << std::endl;
-    std::abort();
-  }
   nlohmann::json defaults = {
       {"cfl_max", 0.8},
       {"is_bjorken", true},

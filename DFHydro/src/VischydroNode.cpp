@@ -1,5 +1,6 @@
-#include <DFHydro/VischydroNode.hpp>
 #include "DFHydroMDSpan.hpp"
+#include <DFHydro/DFHydroEOS.hpp>
+#include <DFHydro/VischydroNode.hpp>
 
 namespace DFHydro {
 

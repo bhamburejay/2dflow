@@ -18,14 +18,20 @@ void Run() {
         "xmin": -20.0,
         "xmax": 20.0,
         "ymin": -15.0,
-        "ymax": 15.0, 
-        "is_periodic": false
+        "ymax": 15.0 
   })");
+  nlohmann::json config = R"({"is_periodic": true})"_json;
 
   ViscousQGP eos; // Default parameters have eta/s=0
   eos.set_eta_by_s(4.0 / (4.0 * M_PI));
 
-  Vischydro vischydro(input, &eos);
+  int nx = input.at("nx").get<int>();
+  int ny = input.at("ny").get<int>();
+  double xmin = input.at("xmin").get<double>();
+  double xmax = input.at("xmax").get<double>();
+  double ymin = input.at("ymin").get<double>();
+  double ymax = input.at("ymax").get<double>();
+  Vischydro vischydro(nx, xmin, xmax, ny, ymin, ymax, &eos, config);
 
   DMDALocalInfo info;
   DMDAGetLocalInfo(vischydro.domain, &info);

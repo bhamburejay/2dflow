@@ -1,5 +1,5 @@
-#ifndef EOS_HPP
-#define EOS_HPP
+#ifndef DFHYDRO_EOS_HPP
+#define DFHYDRO_EOS_HPP
 #include <cmath>
 
 #ifndef M_PI
@@ -32,14 +32,15 @@ private:
   double zeta_by_s;
 
 public:
-  ViscousQGP(double Nc_in = 3, double Nf_in = 0, double eta_by_s_in = 1.0 / (4.0 * M_PI), double zeta_by_s_in = 0.0)
+  ViscousQGP(double Nc_in = 3, double Nf_in = 0,
+             double eta_by_s_in = 1.0 / (4.0 * M_PI), double zeta_by_s_in = 0.0)
       : Nc(Nc_in), Nf(Nf_in), eta_by_s(eta_by_s_in), zeta_by_s(zeta_by_s_in) {
     Cp = M_PI * M_PI / 90.0 *
          (2 * (Nc * Nc - 1) + 7. / 2 * Nc * Nf); // p = Cp * T^4
   }
   ~ViscousQGP() = default;
 
-  void initialize_eos() {;};
+  void initialize_eos() { ; };
   double get_cs2(double e, double rhob) const { return (1. / 3.); }
   double get_temperature(double e, double rhob) const {
     return pow(e / (3.0 * Cp), 0.25);
