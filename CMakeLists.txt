@@ -30,20 +30,11 @@ else()
     message(STATUS "PETSc not built with HDF5 support")
 endif()
 
-
-# Add include directories
-include_directories(include)
-include_directories(src)
-include_directories(${PETSC_INCLUDE_DIRS})
-
-
-set(SOURCES
-${CMAKE_SOURCE_DIR}/src/VischydroNode.cpp
-${CMAKE_SOURCE_DIR}/src/Vischydro.cpp)
-
+add_subdirectory(DFHydro)
+add_subdirectory(example)
 if (PETSC_HAS_HDF5)
     add_subdirectory(tests)
 endif()
-add_subdirectory(example)
+
 
 

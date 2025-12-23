@@ -1,8 +1,6 @@
-#include "Vischydro.hpp"
-#include "Vischydro_impl.hpp"
+#include <DFHydro/Vischydro.hpp>
 #include <fstream>
 #include <iostream>
-
 #include <petscviewerhdf5.h>
 
 using namespace DFHydro;

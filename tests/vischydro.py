@@ -65,7 +65,7 @@ _input_data = {
 
 class FixedData(UserDict):
     """ This is a dictionary helper classes that does not allow adding new keys,
-    preveningt typos. 
+    preventing typos. 
 
     It also allows accessing nested dictionary elements using
     a single keystring with '/' separators. For example, to access the value of

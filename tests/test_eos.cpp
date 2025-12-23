@@ -1,5 +1,5 @@
 #include <petsc.h>
-#include "DFHydroEOS.hpp"
+#include <DFHydro/DFHydroEOS.hpp>
 
 // Test the EOS class. Instantiate with ein and calculate the rest of variables
 int main(int argc, char **argv){

@@ -1,3 +1,15 @@
+# This file is part of Vischydro.
+"""This script runs a simple 2D Bjorken expansion example with Gaussian initial conditions.  
+
+The script is run with the command:
+
+python VischydroMainRun.py run
+
+This runs the vischydro simulation using the "runcommand" variable. 
+To generate plots of the results after running the simulation use the command:
+
+python VischydroMainRun.py plot
+"""
 import vischydro
 import numpy as np
 import h5py
@@ -6,11 +18,15 @@ import argparse
 import pprint
 import sys
 
+# This is the command used to run the vischydro code.  Modify this as needed for
+# your system. The user may want to change the number of processors used (-n X)
+# or the mpiexec command itself depending on their MPI installation.
+# runcommand = 'mpiexec -n 4 ./VischydroMain.exe'
 runcommand  = 'mpiexec-mpich-clang17 -n 1 ./VischydroMain.exe'
-   
-#runcommand = 'mpiexec -n 4 ./VischydroMain.exe'
 
 
+
+# The purpose of this function is to actually run a simple 2D Bjorken expansion example with Gaussian initial conditions. 
 def runbj2d(fourpietabys, gaussian_const, gaussian_amplitude, gaussian_width, tmin, tmax, petsc_args='', actually_run=True):
     # These are the inputs that must be passed to the vischydro code through an inputfile in the json format.  You can modify these as needed to change the grid size, tstart and stop times, etc.
     print("Creating example input_data for Vischydro")
@@ -45,6 +61,7 @@ def runbj2d(fourpietabys, gaussian_const, gaussian_amplitude, gaussian_width, tm
     # pass command line options to vischydro
     
     if actually_run:
+        # The recommended way to run the vischydro code is through the runcode function in the vischydro module.
         vischydro.runcode(initialdata, vischydro.input_data, runcommand=runcommand, actually_run = actually_run, petsc_args=petsc_args)
     else:
         plot_contours(vischydro.input_data, name)
@@ -110,7 +127,7 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Sub-command: run  -petsc_args
-    run_parser = subparsers.add_parser("run", help="Run the simulation passing all arguments to run command", add_help=False) 
+    run_parser = subparsers.add_parser("run", help="Run the simulation",   add_help=False) 
 
     # Sub-command: plot
     plot_parser = subparsers.add_parser("plot", help="Generate visualizations", description="Generate visualizations for the simple bj2d example simulation")

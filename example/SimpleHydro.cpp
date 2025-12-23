@@ -1,4 +1,4 @@
-#include "Vischydro.hpp"
+#include <DFHydro/Vischydro.hpp>
 #include <fstream>
 #include <iostream>
 #include <petscdmda.h>

@@ -1,8 +1,8 @@
 #include <iostream>
-#include "VischydroNode.hpp"
-#include "DFHydroMDSpan.hpp"
-#include "DFHydroEOS.hpp"
+#include <DFHydro/VischydroNode.hpp>
+#include <DFHydro/DFHydroEOS.hpp>
 #include <array>
+#include "DFHydroMDSpan.hpp"
 
 using namespace DFHydro;
 

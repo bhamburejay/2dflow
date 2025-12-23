@@ -1,4 +1,4 @@
-#include "Vischydro.hpp"
+#include <DFHydro/Vischydro.hpp>
 #include "Vischydro_impl.hpp"
 #include <fstream>
 #include <iostream>
