@@ -74,7 +74,6 @@ bool vhnode_findstate(const double &ein, /* out */ VischydroNode &n,
   double abstol = 1.e-15;
   double reltol = 1.e-8;
   double e = ein;
-  double rhob = 0.;
 
   bool ok = true;
   double f = idealHydroCellIFunction(e, n, eos, ok);
@@ -118,8 +117,7 @@ bool vhnode_checkstate(const VischydroNode &n) {
 // n and EOS eos
 void vhnode_chiinv(const VischydroNode &n, const EOS &eos,
                    std::array<double, 9> &chiinv_d) {
-  double rhob = 0.;
-  double e = n.e;
+  //double e = n.e;
   double u0 = n.u0();
   double cs2 = n.get_cs2();
 
@@ -156,17 +154,17 @@ inline double Power(double base, int exp) { return std::pow(base, exp); }
 void vhnode_kappa(const VischydroNode &n, const EOS &eos, double &knn,
                   std::array<double, 4> &knx, std::array<double, 16> &kxx) {
   double cs2 = n.get_cs2();
-  double w = n.w();
+  //double w = n.w();
   double beta = n.get_beta();
   double vx = n.vx();
   double vy = n.vy();
   double v2 = vx * vx + vy * vy;
-  double u0 = n.u0();
-  double rhob = 0.;
+  //double u0 = n.u0();
+  //double rhob = 0.;
   double T = 1. / beta;
   double s = n.s();
-  double Teta = T * s * eos.get_eta_by_s(n.e, rhob) / pow(1 - cs2 * v2, 2);
-  double Tzeta = T * s * eos.get_zeta_by_s(n.e, rhob) / pow(1 - cs2 * v2, 2);
+  double Teta = T * s * eos.get_eta_by_s(T, 0.) / pow(1 - cs2 * v2, 2);
+  double Tzeta = T * s * eos.get_zeta_by_s(T, 0.) / pow(1 - cs2 * v2, 2);
 
   double knn_shear, knn_bulk;
   std::array<double, 4> knx_shear, knx_bulk;

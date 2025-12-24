@@ -607,7 +607,6 @@ PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
   std::array<double, 4> Bt{};
   std::array<double, 8> Bx_d{};
   MDSpan<double, 4, 2> Bx(Bx_d.data());
-  std::array<double, 36> chiinv_d{};
 
   double knn = 0.0;
   std::array<double, 4> knx_d{};

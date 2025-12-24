@@ -72,13 +72,13 @@ public:
 
 private:
   int nx;
-  int ny;
-  double dx;
-  double dy;
   double xmin;
   double xmax;
+  int ny;
   double ymin;
   double ymax;
+  double dx;
+  double dy;
   double cfl;
   bool is_bjorken;
   bool highest_order_term_only;

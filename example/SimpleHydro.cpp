@@ -35,8 +35,8 @@ void simple_initialize(Vischydro &vischydro) {
       double y = xy[j][i].y;
 
       // Alternatively, could compute x,y from grid indices and spacing
-      double xs = vischydro.get_xmin() + i * vischydro.get_dx();
-      double ys = vischydro.get_ymin() + j * vischydro.get_dy();
+      // double xs = vischydro.get_xmin() + i * vischydro.get_dx();
+      // double ys = vischydro.get_ymin() + j * vischydro.get_dy();
 
       // std::cout << "Grid point (" << i << "," << j << ") : (x,y)=(" << x <<
       // "," << y << ")  (" << xs << "," << ys << ")" <<std::endl;
@@ -68,7 +68,7 @@ void simple_output(Vischydro &vischydro, std::ofstream &out, int istep,
 
   // Convert the Petsc Vec objects to c-style 2D arrays for easy access
   VischydroNode **asol;
-  DMDACoor2d **xy;
+  //DMDACoor2d **xy;
   PetscCallVoid(DMDAVecGetArray(domain, vischydro.solution, &asol));
 
   // Get the grid corners
@@ -124,14 +124,15 @@ PetscErrorCode RunCode() {
   double dt = std::min(vischydro.get_default_time_step(), dt_max);
 
   // Adjust dt to be a power-of-two subdivision of tprint
+  // Just keep halving dt1 until it is less than dt
   double tprint = 1.0;
-  double dt1 = 1.;
+  double dt1 = tprint;
   int nprint = 1;
   while (dt1 >= dt) {
     dt1 = 0.5 * dt1;
     nprint *= 2;
   }
-  dt = dt1;
+  dt = dt1; // Now dt is a power-of-two subdivision of tprint
 
   // See the function defined above
   simple_initialize(vischydro);
