@@ -11,6 +11,11 @@ The output is the C++ files:
 
 These files are procesed by the processbj2d.cpp code to generate VischydroNode_inc.hpp
 
+Variables:
+  vx, vy : fluid velocity components in x and y directions
+  v2 = vx^2 + vy^2
+  cs2 : speed of sound squared
+
 Author: D. Teaney
 Date: Jan 10, 2024
 *)
