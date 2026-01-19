@@ -1,4 +1,4 @@
-#include "Vischydro.hpp"
+#include <DFHydro/Vischydro.hpp>
 #include <fstream>
 #include <iostream>
 #include <petscviewerhdf5.h>
@@ -59,8 +59,9 @@ PetscErrorCode VischydroGridMonitor(TS ts, PetscInt step, PetscReal time, Vec u,
 
   if (step % monitor->print_frequency == 0) {
     PetscPrintf(PETSC_COMM_WORLD, "Time, Step: %f %d \n", time, step);
-    PetscObjectSetName((PetscObject)u, "solution");
-    VecView(u, monitor->H5viewer);
+    auto &solution = monitor->run->solution;
+    PetscObjectSetName((PetscObject)solution, "solution");
+    VecView(solution, monitor->H5viewer);
 
     // Save the viscous tensor in the Landau frame
     PetscObjectSetName((PetscObject)monitor->run->landau_solution, "viscous_tensor");
@@ -102,9 +103,19 @@ PetscErrorCode RunCode() {
   std::unique_ptr<EOS> eos =
       std::make_unique<ViscousQGP>(3., 0, etabys_in, zetabys_in);
 
-  // Initialize the EOS
+  // Initialize the hydro
+  int nx = input.at("VischydroMain").at("nx").get<int>();
+  int ny = input.at("VischydroMain").at("ny").get<int>();
+  double xmin = input.at("VischydroMain").at("xmin").get<double>();
+  double xmax = input.at("VischydroMain").at("xmax").get<double>();
+  double ymin = input.at("VischydroMain").at("ymin").get<double>();
+  double ymax = input.at("VischydroMain").at("ymax").get<double>();
+
+  nlohmann::json config =
+      input.value("Vischydro", nlohmann::json::object());
+
   std::unique_ptr<Vischydro> vischydro =
-      std::make_unique<Vischydro>(input.at("Vischydro"), eos.get());
+      std::make_unique<Vischydro>(nx, xmin, xmax, ny, ymin, ymax, eos.get(), config);
 
   std::string ic_filename = input.at("VischydroMain")
                                 .at("initial_conditions_filename")
@@ -134,12 +145,6 @@ PetscErrorCode RunCode() {
     std::cout << "final_time: " << t_end << std::endl;
   }
 
-  TSSetTime(vischydro->stepper, t_start);
-  TSSetTimeStep(vischydro->stepper, dt);
-  TSSetMaxTime(vischydro->stepper, t_end);
-  TSSetExactFinalTime(vischydro->stepper, TS_EXACTFINALTIME_STEPOVER);
-  TSSetFromOptions(vischydro->stepper);
-
   // Check the -help option to print out the input file structure
   PetscBool help = PETSC_FALSE;
   PetscOptionsGetBool(NULL, NULL, "-help", &help, NULL);
@@ -153,7 +158,7 @@ PetscErrorCode RunCode() {
     return 0;
   }
 
-  TSSolve(vischydro->stepper, vischydro->solution);
+  vischydro->solve(t_start, t_end, dt);
 
   // Save the final state
   if (rank == 0) {

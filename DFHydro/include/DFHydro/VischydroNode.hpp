@@ -1,16 +1,17 @@
-#ifndef VISCHYDRONODE_HPP
-#define VISCHYDRONODE_HPP
+#ifndef DFHYDRO_VISCHYDRONODE_HPP
+#define DFHYDRO_VISCHYDRONODE_HPP
 
-#include "DFHydroEOS.hpp"
+#include <DFHydro/DFHydroEOS.hpp>
 #include <array>
 #include <iostream>
 #include <petsc.h>
 
 namespace DFHydro {
+
 struct VischydroNode {
   static const int dim = 2;
   static const int Ncharge = 3;
-  static const int NDOF = 9;  
+  static const int NDOF = 9;
   PetscScalar E;
   PetscScalar M[dim];
   PetscScalar e;
@@ -68,28 +69,35 @@ struct VischydroNode {
 // FillVischydroNode is a function that fills the VischydroNode with the values
 // of the EOS, starting from the energy density e and the velocity u[]. The
 // values of E and M are calculated from the EOS.
-void vhnode_fill(VischydroNode &node, const EOS &eos) ;
+void vhnode_fill(VischydroNode &node, const EOS &eos);
 
 // FillVischydroNode is a function that fills the VischydroNode with the values
 // of the EOS, starting from the energy density e and the velocities ux, uy. The
-// values of E and M are calculated from the EOS and the rest of the node is filled. This is a convenience overload of vhnode_fill.
-void vhnode_fill(VischydroNode &node, const double &e, const double &ux, const double &uy, const EOS &eos) ; 
-
+// values of E and M are calculated from the EOS and the rest of the node is
+// filled. This is a convenience overload of vhnode_fill.
+void vhnode_fill(VischydroNode &node, const double &e, const double &ux,
+                 const double &uy, const EOS &eos);
 
 // This routine uses the idealHydroCellIFunction and
 // idealHydroCellIFunctionDerivative to find the energy density  with Newton's
-// method. The starting value for the Newton iteration is ein. 
+// method. The starting value for the Newton iteration is ein.
 // The function returns true if the Newton iteration converged. The final energy
 // density is returned, and the pressure, beta, and cs2 are modified, and the
 // node is filled with the values of the EOS. However, E and M are not modified.
 bool vhnode_findstate(const double &ein, /* out */ VischydroNode &n,
-                           const EOS &eos) ;
+                      const EOS &eos);
+
+// Returns true if the state in VischydroNode n is consistent, false otherwise.
+bool vhnode_checkstate(const VischydroNode &n);
 
 // Returns the value of knn, knx, kxx for the given VischydroNode n and EOS eos
-void vhnode_kappa(const VischydroNode &n, const EOS &eos, double &knn, std::array<double, 4> &knx, std::array<double, 16> &kxx); 
+void vhnode_kappa(const VischydroNode &n, const EOS &eos, double &knn,
+                  std::array<double, 4> &knx, std::array<double, 16> &kxx);
 
-// Returns the inverse susceptibility matrix chiiinv for the given VischydroNode n and EOS eos
-void vhnode_chiinv(const VischydroNode &n, const EOS &eos, std::array<double, 9> &chiiinv);
+// Returns the inverse susceptibility matrix chiiinv for the given VischydroNode
+// n and EOS eos
+void vhnode_chiinv(const VischydroNode &n, const EOS &eos,
+                   std::array<double, 9> &chiiinv);
 
 } // namespace DFHydro
 #endif

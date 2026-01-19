@@ -1,7 +1,7 @@
 #include <iostream>
 #include <vector>
-#include "DFHydroEOS.hpp"
-#include "VischydroNode.hpp"
+#include <DFHydro/DFHydroEOS.hpp>
+#include <DFHydro/VischydroNode.hpp>
 
 using namespace std;
 using namespace DFHydro;
