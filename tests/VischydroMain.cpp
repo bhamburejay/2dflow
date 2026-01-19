@@ -61,6 +61,11 @@ PetscErrorCode VischydroGridMonitor(TS ts, PetscInt step, PetscReal time, Vec u,
     PetscPrintf(PETSC_COMM_WORLD, "Time, Step: %f %d \n", time, step);
     PetscObjectSetName((PetscObject)u, "solution");
     VecView(u, monitor->H5viewer);
+
+    // Save the viscous tensor in the Landau frame
+    PetscObjectSetName((PetscObject)monitor->run->landau_solution, "viscous_tensor");
+    VecView(monitor->run->landau_solution, monitor->H5viewer);
+
     // Increment the timestep for the hdf5file
     PetscViewerHDF5IncrementTimestep(monitor->H5viewer);
 

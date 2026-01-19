@@ -25,32 +25,9 @@ void Vischydro::load_initial_conditions(const std::string filename) {
   // Loop over grid points and calculate RHS
   PetscInt xs, ys, xm, ym;
   DMDAGetCorners(domain, &xs, &ys, NULL, &xm, &ym, NULL);
-  
-  bool init_from_conserved = false;
-  if (options.contains("init_from_conserved_charged")) {
-    init_from_conserved = options["init_from_conserved_charged"];
-  }
-
-  if (init_from_conserved) {
-    PetscPrintf(PETSC_COMM_WORLD, "Initializing from Conserved Variables (E, M)...\n");
-  } else {
-    PetscPrintf(PETSC_COMM_WORLD, "Initializing from Primitive Variables (e, u)...\n");
-  }
-
   for (PetscInt j = ys; j < ys + ym; j++) {
     for (PetscInt i = xs; i < xs + xm; i++) {
-        if (init_from_conserved) {
-            // Use the file's 'e' (primitive) as the initial guess for the root finder
-            bool ok = vhnode_findstate(asol[j][i].e, asol[j][i], *eos);
-            if (!ok) {
-                std::cout << "Initialization Error: Root finding failed at " << i << ", " << j << std::endl;
-                // Fallback to fill if finding state fails, or abort? 
-                // Aborting is probably safer for strict validation.
-                 std::abort();
-            }
-        } else {
-            vhnode_fill(asol[j][i], *eos);
-        }
+      vhnode_fill(asol[j][i], *eos);
     }
   }
   // Return the pointer to the local array back to the memory space
@@ -75,13 +52,6 @@ void Vischydro::save(const std::string filename) {
                       &viewer);
   PetscObjectSetName((PetscObject)solution, "output");
   VecView(solution, viewer);
-  // Output for Landau Grid (Viscous Tensor)
-  // TODO: Currently filling with zeros. 
-  // Future: Calculate pi^mn and perform Lorentz boost to Landau frame.
-  VecZeroEntries(landau_solution);
-  PetscObjectSetName((PetscObject)landau_solution, "viscous_tensor");
-  VecView(landau_solution, viewer);
-
   PetscObjectSetName((PetscObject)coordinates, "coordinates");
   VecView(coordinates, viewer);
   PetscViewerDestroy(&viewer);
@@ -796,7 +766,6 @@ Vischydro::Vischydro(nlohmann::json & config, const EOS *eosin) : eos(eosin) {
 
   
   // Extract parameters from JSON
-  options = config;
   try {
     nx = config.at("nx").get<int>();
     ny = config.at("ny").get<int>();
@@ -857,12 +826,6 @@ Vischydro::Vischydro(nlohmann::json & config, const EOS *eosin) : eos(eosin) {
 
   DMCreateGlobalVector(domain, &Residual);
   DMCreateMatrix(domain, &Jacobian);
-
-  // Initialize Landau Grid
-  // 10 DOFs for 4x4 symmetric viscous stress tensor components
-  DMDACreateCompatibleDMDA(domain, 10, &landau_domain);
-  DMCreateGlobalVector(landau_domain, &landau_solution);
-  PetscObjectSetName((PetscObject)landau_solution, "viscous_tensor_landau");
 
   TSSetIFunction(stepper, Residual, LHSIFunction2, this);
   TSSetIJacobian(stepper, Jacobian, Jacobian, LHSIJacobian2, this);

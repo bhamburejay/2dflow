@@ -3,6 +3,8 @@
 #include "Vischydro_impl.hpp"
 #include <vector>
 #include <fstream>
+#include <cmath>
+#include <iostream>
 
 using namespace DFHydro;
 

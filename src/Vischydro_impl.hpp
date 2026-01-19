@@ -2,6 +2,8 @@
 #define Vischydro_impl_hpp
 
 #include <numeric>
+#include <limits>
+#include <algorithm>
 namespace DFHydro {
 class limitter {
 

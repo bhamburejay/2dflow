@@ -28,6 +28,11 @@ public:
     TSDestroy(&stepper);
     VecDestroy(&local_solution);
     VecDestroy(&solution);
+    
+    // Clean up Landau objects
+    if (landau_solution) VecDestroy(&landau_solution);
+    if (landau_domain) DMDestroy(&landau_domain);
+
     DMDestroy(&domain);
     VecDestroy(&Residual);
     MatDestroy(&Jacobian);
@@ -68,6 +73,10 @@ public:
 public: 
   Vec local_solution;
   Vec local_solution_last;
+
+  // New Landau Frame Variables
+  DM landau_domain;
+  Vec landau_solution;
 
 private:
   nlohmann::json options ;
