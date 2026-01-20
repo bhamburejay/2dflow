@@ -58,15 +58,15 @@ for i, tau in enumerate(tau_vals):
     # 3. Transverse Velocity
     v_perp = (2 * q**2 * tau * r_vals) / (1 + q**2 * tau**2 + q**2 * r_vals**2)
     
-    # Subplot 1: Temperature (Linear)
+    # Subplot 1: Temperature (Linear plot)
     axes[0].plot(r_vals, T_analyt, color=colors[i], lw=2, label=rf'$\tau={tau}$ fm/c')
     axes[0].plot(r_vals, T_num, 'k--', lw=0.8, alpha=0.5)
     
-    # Subplot 2: Energy Density (Log)
+    # Subplot 2: Energy Density (Log plot)
     axes[1].semilogy(r_vals, e_analyt, color=colors[i], lw=2)
     axes[1].semilogy(r_vals, e_num, 'k--', lw=0.8, alpha=0.5)
     
-    # Subplot 3: Velocity (Linear)
+    # Subplot 3: Velocity (Linear plot)
     axes[2].plot(r_vals, v_perp, color=colors[i], lw=2)
 
 # Styling
