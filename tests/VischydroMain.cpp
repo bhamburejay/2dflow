@@ -63,11 +63,6 @@ PetscErrorCode VischydroGridMonitor(TS ts, PetscInt step, PetscReal time, Vec u,
     PetscObjectSetName((PetscObject)solution, "solution");
     VecView(solution, monitor->H5viewer);
 
-    // Save the viscous tensor in the Landau frame
-    PetscObjectSetName((PetscObject)monitor->run->landau_solution, "viscous_tensor");
-    VecView(monitor->run->landau_solution, monitor->H5viewer);
-
-    // Increment the timestep for the hdf5file
     PetscViewerHDF5IncrementTimestep(monitor->H5viewer);
 
     int rank = 0;
@@ -120,7 +115,9 @@ PetscErrorCode RunCode() {
   std::string ic_filename = input.at("VischydroMain")
                                 .at("initial_conditions_filename")
                                 .get<std::string>();
-  vischydro->load_initial_conditions(ic_filename);
+  
+  std::string type = input.at("VischydroMain").value("initial_field_type", "primitives");
+  vischydro->load_initial_conditions(ic_filename, type);
 
   // File names take the form run_name_initial.h5 and run_name_final.h5
   std::string run_name =

@@ -14,7 +14,7 @@ namespace DFHydro {
 
 using namespace DFHydro;
 
-void Vischydro::load_initial_conditions(const std::string filename) {
+void Vischydro::load_initial_conditions(const std::string &filename, const std::string &type)  {
 #ifdef PETSC_HAVE_HDF5
   PetscViewer viewer;
   PetscViewerHDF5Open(PETSC_COMM_WORLD, filename.c_str(), FILE_MODE_READ,
@@ -30,26 +30,13 @@ void Vischydro::load_initial_conditions(const std::string filename) {
   PetscInt xs, ys, xm, ym;
   DMDAGetCorners(domain, &xs, &ys, NULL, &xm, &ym, NULL);
   
-  bool init_from_conserved = false;
-  if (options.contains("init_from_conserved_charged")) {
-    init_from_conserved = options["init_from_conserved_charged"];
-  }
-
-  if (init_from_conserved) {
-    PetscPrintf(PETSC_COMM_WORLD, "Initializing from Conserved Variables (E, M)...\n");
-  } else {
-    PetscPrintf(PETSC_COMM_WORLD, "Initializing from Primitive Variables (e, u)...\n");
-  }
-
   for (PetscInt j = ys; j < ys + ym; j++) {
     for (PetscInt i = xs; i < xs + xm; i++) {
-        if (init_from_conserved) {
+        if (type == "charges") {
             // Use the file's 'e' (primitive) as the initial guess for the root finder
             bool ok = vhnode_findstate(asol[j][i].e, asol[j][i], *eos);
             if (!ok) {
                 std::cout << "Initialization Error: Root finding failed at " << i << ", " << j << std::endl;
-                // Fallback to fill if finding state fails, or abort? 
-                // Aborting is probably safer for strict validation.
                  std::abort();
             }
         } else {
@@ -68,19 +55,13 @@ void Vischydro::load_initial_conditions(const std::string filename) {
 
 // Save the current grid to a file using HDF5. The filename is optional and
 // defaults to output.h5
-void Vischydro::save(const std::string filename) {
+void Vischydro::save(const std::string &filename) {
 #ifdef PETSC_HAVE_HDF5
   PetscViewer viewer;
   PetscViewerHDF5Open(PETSC_COMM_WORLD, filename.c_str(), FILE_MODE_WRITE,
                       &viewer);
   PetscObjectSetName((PetscObject)solution, "output");
   VecView(solution, viewer);
-  // Output for Landau Grid (Viscous Tensor)
-  // TODO: Currently filling with zeros. 
-  // Future: Calculate pi^mn and perform Lorentz boost to Landau frame.
-  VecZeroEntries(landau_solution);
-  PetscObjectSetName((PetscObject)landau_solution, "viscous_tensor");
-  VecView(landau_solution, viewer);
 
   PetscObjectSetName((PetscObject)coordinates, "coordinates");
   VecView(coordinates, viewer);

@@ -57,6 +57,7 @@ _input_data = {
         "dt_max": 1.0,
         "run_name": "DFTest",
         "initial_conditions_filename": "DFTest_ic.h5",
+        "initial_field_type" : "primitives",
         "eta_by_s": 1./(4.*np.pi),
         "zeta_by_s": 0.0
     }
