@@ -38,7 +38,14 @@ add_executable(test_grid_transfer.exe ./test_grid_transfer.cpp)
 target_include_directories(test_grid_transfer.exe PRIVATE ${SRCDIR})
 target_link_libraries(test_grid_transfer.exe DFHydro)
 
+add_executable(test_coordinates.exe ./test_coordinates.cpp)
+target_include_directories(test_coordinates.exe PRIVATE ${SRCDIR})
+target_link_libraries(test_coordinates.exe DFHydro)
+
 configure_file(./vischydro.py ./vischydro.py)
 configure_file(./VischydroMainRun.py ./VischydroMainRun.py)
 add_executable(VischydroMain.exe ./VischydroMain.cpp)
 target_link_libraries(VischydroMain.exe DFHydro)
+
+configure_file(./test_ideal_gubser.py ./test_ideal_gubser.py)
+

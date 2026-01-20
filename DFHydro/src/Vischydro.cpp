@@ -14,7 +14,7 @@ namespace DFHydro {
 
 using namespace DFHydro;
 
-void Vischydro::load_initial_conditions(const std::string &filename, const std::string &type)  {
+void Vischydro::load_initial_conditions(const std::string &filename, const std::string &initial_field_type)  {
 #ifdef PETSC_HAVE_HDF5
   PetscViewer viewer;
   PetscViewerHDF5Open(PETSC_COMM_WORLD, filename.c_str(), FILE_MODE_READ,
@@ -32,7 +32,7 @@ void Vischydro::load_initial_conditions(const std::string &filename, const std::
   
   for (PetscInt j = ys; j < ys + ym; j++) {
     for (PetscInt i = xs; i < xs + xm; i++) {
-        if (type == "charges") {
+        if (initial_field_type == "charges") {
             // Use the file's 'e' (primitive) as the initial guess for the root finder
             bool ok = vhnode_findstate(asol[j][i].e, asol[j][i], *eos);
             if (!ok) {
@@ -895,9 +895,14 @@ Vischydro::Vischydro(const int &nx_i, const double &xmin_i,
   DMCreateGlobalVector(qdomain, &qsolution);
 
   // Set coordinates
-  DMDASetUniformCoordinates(domain, xmin, xmax, ymin, ymax, 0.0, 0.0);
+  if (is_periodic) {
+    DMDASetUniformCoordinates(domain, xmin, xmax, ymin, ymax, 0.0, 0.0);
+  } else {
+    DMDASetUniformCoordinates(domain, xmin, xmax - dx, ymin, ymax - dy, 0.0, 0.0);
+  }
   DMGetCoordinates(domain, &coordinates);
   DMGetCoordinateDM(domain, &cdomain);
+
 
   // Create the time stepper object of PETSc.
   // We note that the time stepper will work on the qdomain and qsolution
