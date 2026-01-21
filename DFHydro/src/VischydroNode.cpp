@@ -14,20 +14,14 @@ void vhnode_fill(VischydroNode &node, const EOS &eos) {
   node.p = eos.get_pressure(e, rhob);
   node.beta = 1. / eos.get_temperature(e, rhob);
   node.cs2 = eos.get_cs2(e, rhob);
+  node.ut = sqrt(1. + node.u[0] * node.u[0] + node.u[1] * node.u[1]);
   double u0 = node.u0();
   node.E = (e + node.p) * u0 * u0 - node.p;
   for (int i = 0; i < VischydroNode::dim; i++) {
     node.M[i] = (e + node.p) * u0 * node.u[i];
   }
 }
-void vhnode_fill(VischydroNode &node, const double &e, const double &ux,
-                 const double &uy, const EOS &eos) {
-  node.e = e;
-  node.u[0] = ux;
-  node.u[1] = uy;
-  vhnode_fill(node, eos);
-}
-//
+
 // Returns the function which should be zero if the energy density and velocity
 // u[] are consistent with E and M[] and the EOS. E and M are not modified in
 // this function, but the pressure, beta, and cs2 are.
@@ -51,6 +45,7 @@ double idealHydroCellIFunction(const double &e, /* out */ VischydroNode &n,
   for (int i = 0; i < VischydroNode::dim; i++) {
     n.u[i] = gamma * n.M[i] / (n.E + n.p);
   }
+  n.ut = gamma;
   return e + n.p - (n.E + n.p) * (1. - v * v);
 }
 
@@ -117,7 +112,7 @@ bool vhnode_checkstate(const VischydroNode &n) {
 // n and EOS eos
 void vhnode_chiinv(const VischydroNode &n, const EOS &eos,
                    std::array<double, 9> &chiinv_d) {
-  //double e = n.e;
+  // double e = n.e;
   double u0 = n.u0();
   double cs2 = n.get_cs2();
 
@@ -154,13 +149,13 @@ inline double Power(double base, int exp) { return std::pow(base, exp); }
 void vhnode_kappa(const VischydroNode &n, const EOS &eos, double &knn,
                   std::array<double, 4> &knx, std::array<double, 16> &kxx) {
   double cs2 = n.get_cs2();
-  //double w = n.w();
+  // double w = n.w(); // not used
   double beta = n.get_beta();
   double vx = n.vx();
   double vy = n.vy();
   double v2 = vx * vx + vy * vy;
-  //double u0 = n.u0();
-  //double rhob = 0.;
+  // double u0 = n.u0(); // not used
+  // double rhob = 0.; // not used
   double T = 1. / beta;
   double s = n.s();
   double Teta = T * s * eos.get_eta_by_s(T, 0.) / pow(1 - cs2 * v2, 2);

@@ -44,7 +44,7 @@ _input_data = {
         "is_periodic": False
     },
     "VischydroMain": {
-        "ndof": 9,
+        "ndof": 15,
         "nx": 80,
         "ny": 90,
         "xmin": -8.0,
