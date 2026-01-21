@@ -33,9 +33,11 @@ public:
 
   // Load initial conditions from an HDF5 file. If type is "primitives", the
   // file is assumed to contain primitive variables. If type is "charges", the
-  // file is assumed to contain conserved charges as well as the energy density to
-  // use as an initial guess for the root finder.
-  void load_initial_conditions(const std::string &filename, const std::string &initial_field_type = "primitives");
+  // file is assumed to contain conserved charges as well as the energy density
+  // to use as an initial guess for the root finder.
+  void
+  load_initial_conditions(const std::string &filename,
+                          const std::string &initial_field_type = "primitives");
 
   void print_grid_dimensions() const {
     std::cout << "Grid dimensions: " << nx << " " << ny << std::endl;
