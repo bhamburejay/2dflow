@@ -1,14 +1,13 @@
-#include <iostream>
-#include <vector>
 #include <DFHydro/DFHydroEOS.hpp>
 #include <DFHydro/VischydroNode.hpp>
+#include <iostream>
+#include <vector>
 
 using namespace std;
 using namespace DFHydro;
 
 // Test idealHydroCellSolve for a specified energy density and velocity.
-void test_idealHydroCellSolve()
-{
+void test_idealHydroCellSolve() {
   ViscousQGP eos;
 
   // Load a node
@@ -37,9 +36,12 @@ void test_idealHydroCellSolve()
   cout << "s = " << n.s() << endl;
 
   // Test fluxX, fluxY, and charge
-  cout << "fluxX = " << n.fluxX()[0] << " " << n.fluxX()[1] << " " << n.fluxX()[2] << endl;
-  cout << "fluxY = " << n.fluxY()[0] << " " << n.fluxY()[1] << " " << n.fluxY()[2] << endl;
-  cout << "charge = " << n.charge()[0] << " " << n.charge()[1] << " " << n.charge()[2] << endl;
+  cout << "fluxX = " << n.fluxX()[0] << " " << n.fluxX()[1] << " "
+       << n.fluxX()[2] << endl;
+  cout << "fluxY = " << n.fluxY()[0] << " " << n.fluxY()[1] << " "
+       << n.fluxY()[2] << endl;
+  cout << "charge = " << n.charge()[0] << " " << n.charge()[1] << " "
+       << n.charge()[2] << endl;
 
   // And test vx, vy
   cout << "vx = " << n.vx() << endl;
@@ -57,9 +59,94 @@ void test_idealHydroCellSolve()
   n.print("** Before vhnode_findstate **");
   ok = vhnode_findstate(e, n, eos);
   n.print("** After vhnode_findstate **");
+
+  // Construct a VischydroNode in DF frame with shear stress and test get_stress
+  VischydroNode nDF{};
+  double pinn = 0.05;
+  std::array<double, 4> piij = {0.1, 0.04, 0.04, 0.08};
+  nDF.setstate(eos, e, n.ux(), n.uy(), piij[0], piij[1], piij[3], pinn);
+
+  // Print the DF frame node
+  nDF.print("** DF frame node with shear stress **");
+
+  // Get the stress tensor from the DF frame node
+  std::array<double, 4> Tij;
+  double Tnn;
+  nDF.get_stress(Tij, Tnn);
+
+  // Get the ideal stress tensor from the DF frame node
+  std::array<double, 4> Tij0;
+  double Tnn0;
+  nDF.get_ideal_stress(Tij0, Tnn0);
+
+  // Print the stresses
+  cout << "Shear stress components from get_stress:" << endl;
+  cout << "Tij:" << endl;
+  for (int i = 0; i < 4; i++) {
+    cout << Tij[i] << " ";
+  }
+  cout << Tnn << endl;
+  cout << "Tij0 (ideal):" << endl;
+  for (int i = 0; i < 4; i++) {
+    cout << Tij0[i] << " ";
+  }
+  cout << Tnn0 << endl;
+
+  // Check for consistency
+  cout << "Shear stress components from get_stress:" << endl;
+  cout << "Tij - Tij0 - piij:" << endl;
+  for (int i = 0; i < 4; i++) {
+    cout << Tij[i] - Tij0[i] - piij[i] << " ";
+  }
+  cout << Tnn - Tnn0 - pinn << endl;
+
+  // Testthe DF to LF and LF to DF conversions
+  VischydroNode nLF{};
+  vhnode_DFtoLF(eos, nDF, nLF);
+
+  // Construct another LF node directly
+  VischydroNode nLF2{};
+  nLF2.setstate_LF(eos, nLF.e, nLF.ux(), nLF.uy(), nLF.piij[0], nLF.piij[1],
+                   nLF.piij[3], nLF.pinn);
+
+  // Print the two LF nodes
+  cout << "LF node from DF to LF conversion:" << endl;
+  nLF.print("** LF from DFtoLF **");
+  cout << "LF node constructed directly:" << endl;
+  nLF2.print("** LF constructed directly **");
+
+  // Now convert back to DF frame
+  VischydroNode nDF_recovered{};
+  vhnode_LFtoDF(eos, nLF, nDF_recovered);
+  cout << "Recovered DF state vs original DF state:" << endl;
+  nDF_recovered.print("** Recovered DF state **");
+  nDF.print("** Original DF state **");
+
+  // Check the conserved charges in nLF, nDF, and nDF_recovered are
+  // bitwise identical
+  cout << "Conserved charges comparison:" << endl;
+  if ((nLF.E == nDF.E) && (nLF.M[0] == nDF.M[0]) && (nLF.M[1] == nDF.M[1])) {
+    cout << "nLF and nDF conserved charges match." << endl;
+  } else {
+    cout << "nLF and nDF conserved charges DO NOT match!" << endl;
+  }
+  if ((nDF_recovered.E == nDF.E) && (nDF_recovered.M[0] == nDF.M[0]) &&
+      (nDF_recovered.M[1] == nDF.M[1])) {
+    cout << "nDF_recovered and nDF conserved charges match." << endl;
+  } else {
+    cout << "nDF_recovered and nDF conserved charges DO NOT match!" << endl;
+  }
+  // However the nLF2 constructed directly may not match bitwise due to
+  // numerical differences
+  if ((nLF2.E == nDF.E) && (nLF2.M[0] == nDF.M[0]) && (nLF2.M[1] == nDF.M[1])) {
+    cout << "nLF2 and nDF conserved charges match." << endl;
+  } else {
+    cout << "nLF2 and nDF conserved charges DO NOT match, but that is expected "
+            "due to numerical differences!"
+         << endl;
+  }
 }
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
   test_idealHydroCellSolve();
   return 0;
 }

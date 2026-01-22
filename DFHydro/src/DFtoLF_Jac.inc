@@ -1,0 +1,10 @@
+Mxx=4.*Txy*ux*uy+(Ttt+Txx)*(1.+3.*(ux*ux))+(Ttt+Tyy)*(uy*uy)-(1.*Ttx*ux*(5.+6\
+.*(ux*ux)+4.*(uy*uy)))/sqrt(1.+ux*ux+uy*uy)-(2.*Tty*(uy+2.*uy*(ux*ux)+pow(uy,\
+3.)))/sqrt(1.+ux*ux+uy*uy);
+Mxy=Txy+2.*(Ttt+Tyy)*ux*uy+2.*Txy*(ux*ux)-(1.*Ttx*(uy+2.*uy*(ux*ux)))/sqrt(1.\
++ux*ux+uy*uy)-(2.*Tty*(ux+2.*ux*(uy*uy)+pow(ux,3.)))/sqrt(1.+ux*ux+uy*uy);
+Myx=Txy+2.*(Ttt+Txx)*ux*uy+2.*Txy*(uy*uy)-(1.*Tty*(ux+2.*ux*(uy*uy)))/sqrt(1.\
++ux*ux+uy*uy)-(2.*Ttx*(uy+2.*uy*(ux*ux)+pow(uy,3.)))/sqrt(1.+ux*ux+uy*uy);
+Myy=Ttt+Tyy+4.*Txy*ux*uy+Ttt*(ux*ux)+Txx*(ux*ux)+3.*(Ttt+Tyy)*(uy*uy)-(1.*Tty\
+*uy*(5.+4.*(ux*ux)+6.*(uy*uy)))/sqrt(1.+ux*ux+uy*uy)-(2.*Ttx*(ux+2.*ux*(uy*uy\
+)+pow(ux,3.)))/sqrt(1.+ux*ux+uy*uy);
