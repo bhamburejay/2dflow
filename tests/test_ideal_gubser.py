@@ -48,16 +48,17 @@ def gubser_solution(tau, r, q=1.0, e0=1.0):
     return e, utau, ur
 
 
-def run(run_name, q, e0, tau0, exe_path="./VischydroMain.exe"):
-
+def setup(q, e0, tau0):
     # Grid setup
     nx = 80
     ny = 80
     xmin, xmax = -5.0, 5.0
     ymin, ymax = -5.0, 5.0
+    vh.input_data["Vischydro/is_bjorken"] = True
+    vh.input_data["Vischydro/use_ideal_step_only"] = True
 
-    vh.input_data["VischydroMain/eta_by_s"] = 0.0
-    vh.input_data["VischydroMain/zeta_by_s"] = 0.0
+    vh.input_data["VischydroMain/eta_by_s"] = 1.0 / (4.*np.pi)
+    vh.input_data["VischydroMain/zeta_by_s"] = 0.5 / (4.*np.pi)
     vh.input_data["VischydroMain/initial_field_type"] = "charges"
 
     vh.input_data["VischydroMain/nx"] = nx
@@ -66,7 +67,6 @@ def run(run_name, q, e0, tau0, exe_path="./VischydroMain.exe"):
     vh.input_data["VischydroMain/xmax"] = xmax
     vh.input_data["VischydroMain/ymin"] = ymin
     vh.input_data["VischydroMain/ymax"] = ymax
-    vh.input_data["Vischydro/is_bjorken"] = True
 
     # Set time stepping
     dt = 0.05
@@ -76,6 +76,10 @@ def run(run_name, q, e0, tau0, exe_path="./VischydroMain.exe"):
     vh.input_data["VischydroMain/dt_max"] = dt
     vh.input_data["VischydroMain/print_frequency"] = 10
     vh.input_data["VischydroMain/run_name"] = "gubser_test"
+
+
+def run(q, e0, tau0, exe_path="./VischydroMain.exe"):
+    setup(q, e0, tau0)
 
     # Generate initial condition
     X, Y, dx, dy = vh.xygrid(vh.input_data)
@@ -105,7 +109,6 @@ def run(run_name, q, e0, tau0, exe_path="./VischydroMain.exe"):
     initial_grid[:, :, 1] = Mx_cons
     initial_grid[:, :, 2] = My_cons
     initial_grid[:, :, 3] = e_init  # initial guess for root finder
-
     # these are not needed since we are using conserved initial conditions
     # initial_grid[:,:,4] = ux_init
     # initial_grid[:,:,5] = uy_init
@@ -114,7 +117,10 @@ def run(run_name, q, e0, tau0, exe_path="./VischydroMain.exe"):
     vh.runcode(initial_grid, vh.input_data, runcommand=exe_path)
 
 
-def analyze_results(run_name, q, e0):
+def analyze_results(q, e0, tau0):
+    setup(q, e0, tau0)
+    run_name = vh.input_data["VischydroMain/run_name"]
+
     # Load grid time file
     try:
         times = np.loadtxt(f"{run_name}_grid_t.txt")
@@ -205,8 +211,8 @@ if __name__ == "__main__":
     run_parser = subparsers.add_parser(
         "run", help="Run the Gubser flow verification test")
 
-    run_parser.add_argument("--run_command", required=True, type=str,
-                            default="./VischydroMain.exe", help="Command to run the VischydroMain executable")
+    run_parser.add_argument("--run_command", default="./VischydroMain.exe",
+                            help="Command to run the VischydroMain executable")
 
     # Sub-command: plot
     plot_parser = subparsers.add_parser(
@@ -215,12 +221,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Setup parameters
-    run_name = "gubser_test"
     q = 1.0
     e0 = 1.0
     tau0 = 0.6
 
     if args.command == "run":
-        run(run_name, q, e0, tau0, exe_path=args.run_command)
+        run(q, e0, tau0, exe_path=args.run_command)
     elif args.command == "plot":
-        analyze_results(run_name, q, e0)
+        analyze_results(q, e0, tau0)

@@ -104,10 +104,27 @@ void test_idealHydroCellSolve() {
   VischydroNode nLF{};
   vhnode_DFtoLF(eos, nDF, nLF);
 
+  // Print out the differences between the computed charges and the original
+  // ones
+  cout << "DF to LF conversion computed charge:" << endl;
+
+  double pitx = nLF.get_piij(0, 0) * nLF.vx() + nLF.get_piij(0, 1) * nLF.vy();
+  double pity = nLF.get_piij(0, 1) * nLF.vx() + nLF.get_piij(1, 1) * nLF.vy();
+  double pitt = pitx * nLF.vx() + pity * nLF.vy();
+
+  double computedE = nLF.w() * nLF.u0() * nLF.u0() - nLF.p + pitt;
+  double computedMx = nLF.w() * nLF.u0() * nLF.ux() + pitx;
+  double computedMy = nLF.w() * nLF.u0() * nLF.uy() + pity;
+
+  cout << "nLF.E - E = " << nLF.E - computedE << endl;
+  cout << "nLF.Mx - Mx = " << nLF.M[0] - computedMx << endl;
+  cout << "nLF.My - My = " << nLF.M[1] - computedMy << endl;
+
   // Construct another LF node directly
   VischydroNode nLF2{};
-  nLF2.setstate_LF(eos, nLF.e, nLF.ux(), nLF.uy(), nLF.piij[0], nLF.piij[1],
-                   nLF.piij[3], nLF.pinn);
+  double eLF2, ux, uy, pixxS, pixyS, piyyS, pinnS, piB;
+  nLF.getstate_LF(eos, eLF2, ux, uy, pixxS, pixyS, piyyS, pinnS, piB);
+  nLF2.setstate_LF(eos, eLF2, ux, uy, pixxS, pixyS, piyyS, pinnS, piB);
 
   // Print the two LF nodes
   cout << "LF node from DF to LF conversion:" << endl;
@@ -139,11 +156,16 @@ void test_idealHydroCellSolve() {
   // However the nLF2 constructed directly may not match bitwise due to
   // numerical differences
   if ((nLF2.E == nDF.E) && (nLF2.M[0] == nDF.M[0]) && (nLF2.M[1] == nDF.M[1])) {
-    cout << "nLF2 and nDF conserved charges match." << endl;
+    cout << "nLF2 and nDF conserved charges match bitwise." << endl;
   } else {
-    cout << "nLF2 and nDF conserved charges DO NOT match, but that is expected "
-            "due to numerical differences!"
+    cout << "nLF2 and nDF conserved charges DO NOT match bitwise, but that is "
+            "expected "
+            "due to numerical round-off."
          << endl;
+    cout << "nLF2 - nDF differences:" << endl;
+    cout << "E: " << nLF2.E - nDF.E << endl;
+    cout << "Mx: " << nLF2.M[0] - nDF.M[0] << endl;
+    cout << "My: " << nLF2.M[1] - nDF.M[1] << endl;
   }
 }
 int main(int argc, char *argv[]) {

@@ -451,68 +451,6 @@ PetscErrorCode PreStep(TS ts) {
   return 0;
 }
 
-// PostStep function to transfer solution from qsolution used by the TS solver
-// back to solution vector. This happens after each time step. Then the
-// primitives are recovered in the solution vector.
-PetscErrorCode PostStepInversion(TS ts) {
-  Vischydro *runptr = nullptr;
-  TSGetApplicationContext(ts, &runptr);
-  Vischydro &run = *runptr;
-
-  Vec Y = nullptr;
-  TSGetSolution(ts, &Y);
-  TransferQGridToSolution(run.qdomain, Y, run.domain, run.solution);
-
-  // Recover the primitives
-  VischydroNode **au;
-  PetscCall(DMDAVecGetArray(run.domain, run.solution, &au));
-
-  int ixs, ixm, jys, jym;
-  DMDAGetCorners(run.domain, &ixs, &jys, NULL, &ixm, &jym, NULL);
-  for (int j = jys; j < jys + jym; j++) {
-    for (int i = ixs; i < ixs + ixm; i++) {
-      bool ok = vhnode_findstate(au[j][i].e, au[j][i], *run.eos);
-      if (!ok) {
-        findstate_problem("PostStepInversion", i, j, au[j][i], au[j][i],
-                          *run.eos);
-      }
-    }
-  }
-  PetscCall(DMDAVecRestoreArray(run.domain, run.solution, &au));
-  return 0;
-}
-
-// PostStage function to transfer solution from qsolution used by the TS solver
-// back to solution vector. This happens after each stage of the solver. Then
-// the primitives are recovered in the solution vector.
-PetscErrorCode PostStageInversion(TS ts, PetscReal stagetime,
-                                  PetscInt stageindex, Vec *Y) {
-  Vischydro *runptr = nullptr;
-  TSGetApplicationContext(ts, &runptr);
-  Vischydro &run = *runptr;
-
-  TransferQGridToSolution(run.qdomain, Y[stageindex], run.domain, run.solution);
-
-  // Recover the primitives
-  VischydroNode **au;
-  PetscCall(DMDAVecGetArray(run.domain, run.solution, &au));
-
-  int ixs, ixm, jys, jym;
-  DMDAGetCorners(run.domain, &ixs, &jys, NULL, &ixm, &jym, NULL);
-  for (int j = jys; j < jys + jym; j++) {
-    for (int i = ixs; i < ixs + ixm; i++) {
-      bool ok = vhnode_findstate(au[j][i].e, au[j][i], *run.eos);
-      if (!ok) {
-        std::string context =
-            "PostStageInversion_" + std::to_string(stageindex);
-        findstate_problem(context, i, j, au[j][i], au[j][i], *run.eos);
-      }
-    }
-  }
-  PetscCall(DMDAVecRestoreArray(run.domain, run.solution, &au));
-  return 0;
-}
-
 // Evaluate the inverse susceptibility matrix at a vertex given the four
 // surrounding nodes
 void evaluate_vertex_chiinv(const VischydroNode &n00, const VischydroNode &n01,
@@ -567,22 +505,19 @@ void get_derivative_matrix(const double &dx, const double &dy,
   return;
 }
 
-// LHS implicit function for the viscous hydro equations. See notes for
-// expalanation.
-PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
-                             void *context) {
+enum class ViscousFunctionType { Difference, Average };
+
+PetscErrorCode ViscousFunction(TS ts, PetscReal t, Vec U, Vec F, void *context,
+                               enum ViscousFunctionType type) {
 
   PetscLogEvent event;
-  PetscLogEventRegister("LHSIFunction2", 0, &event);
+  PetscLogEventRegister("ViscousFunction", 0, &event);
   PetscLogEventBegin(event, 0, 0, 0, 0);
-
-  // This is just copying udot to F. F is updated below
-  VecCopy(udot, F);
 
   auto run = (Vischydro *)context;
 
   // Transfer the solution vector u, which is on the q-grid to the solution grid
-  TransferQGridToSolution(run->qdomain, u, run->domain, run->solution);
+  TransferQGridToSolution(run->qdomain, U, run->domain, run->solution);
 
   // Do communcation and fill up boundary cells fillin local_solution based on u
   PetscCall(DMGlobalToLocal(run->domain, run->solution, INSERT_VALUES,
@@ -591,6 +526,16 @@ PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
   // Local array with the boundary cells
   VischydroNode **au;
   PetscCall(DMDAVecGetArray(run->domain, run->local_solution, &au));
+
+  // This is the vector that holds the LHS function,  differences of strains
+  VischydroQNode **aF;
+  if (type == ViscousFunctionType::Difference) {
+    PetscCall(DMDAVecGetArray(run->qdomain, F, &aF));
+  }
+  VischydroNode **aU = nullptr;
+  if (type == ViscousFunctionType::Average) {
+    PetscCall(DMDAVecGetArray(run->domain, run->solution, &aU));
+  }
 
   // Get the grid information
   DMDALocalInfo info;
@@ -605,13 +550,23 @@ PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
     for (int i = ixs - 1; i < ixs + ixm + 1; i++) {
       bool ok = vhnode_findstate(au[j][i].e, au[j][i], *run->eos);
       if (!ok) {
-        findstate_problem("LHSIFunction2", i, j, au[j][i], au[j][i], *run->eos);
+        findstate_problem("ViscousFunction", i, j, au[j][i], au[j][i],
+                          *run->eos);
+      }
+      if (type == ViscousFunctionType::Average) {
+        // check that we are in the computational domain
+        if (i >= ixs and i < ixs + ixm and j >= jys and j < jys + jym) {
+          aU[j][i] = au[j][i];
+          aU[j][i].set_viscous_stress(0.0, 0.0, 0.0,
+                                      0.0); // reset viscous stresses
+        }
       }
     }
   }
 
   double gtt = -1.0;
   double k33 = (run->is_bjorken_expansion() ? gtt / (4 * t) : 0);
+  double k33average = (run->is_bjorken_expansion() ? 1.0 / 4.0 : 0);
   std::array<double, 4> K{k33, k33, k33, k33};
 
   std::array<double, 8> Dx_d{};
@@ -630,10 +585,6 @@ PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
 
   std::array<int, 4> is = {0, 1, 0, 1};
   std::array<int, 4> js = {0, 0, 1, 1};
-
-  // This is the vector that holds the LHS function
-  VischydroQNode **aF;
-  PetscCall(DMDAVecGetArray(run->qdomain, F, &aF));
 
   for (int j = jys - 1; j < jys + jym; j++) {
     for (int i = ixs - 1; i < ixs + ixm; i++) {
@@ -662,30 +613,60 @@ PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
         }
 
         for (int sp = 0; sp < 4; sp++) {
-          aF[jp][ip].E += +K[s] * knn * K[sp] * Bt[sp] +
-                          K[s] * knx(0, 0) * Dx(sp, 0) * Bx(sp, 0) +
-                          K[s] * knx(0, 1) * Dx(sp, 0) * Bx(sp, 1) +
-                          K[s] * knx(1, 0) * Dx(sp, 1) * Bx(sp, 0) +
-                          K[s] * knx(1, 1) * Dx(sp, 1) * Bx(sp, 1);
+          PetscScalar pinn = knn * K[sp] * Bt[sp] +
+                             knx(0, 0) * Dx(sp, 0) * Bx(sp, 0) +
+                             knx(0, 1) * Dx(sp, 0) * Bx(sp, 1) +
+                             knx(1, 0) * Dx(sp, 1) * Bx(sp, 0) +
+                             knx(1, 1) * Dx(sp, 1) * Bx(sp, 1);
+
+          switch (type) {
+          case ViscousFunctionType::Difference:
+            aF[jp][ip].E += K[s] * pinn;
+            break;
+          case ViscousFunctionType::Average:
+            aU[jp][ip].get_pinn() += -k33average * pinn;
+            break;
+          }
 
           for (int l1 = 0; l1 < 2; l1++) {
             for (int l2 = 0; l2 < 2; l2++) {
-              aF[jp][ip].M[l1] +=
-                  +Dx(s, l2) * knx(l1, l2) * K[sp] * Bt[sp] +
-                  Dx(s, l2) * kxx(l1, l2, 0, 0) * Dx(sp, 0) * Bx(sp, 0) +
-                  Dx(s, l2) * kxx(l1, l2, 0, 1) * Dx(sp, 0) * Bx(sp, 1) +
-                  Dx(s, l2) * kxx(l1, l2, 1, 0) * Dx(sp, 1) * Bx(sp, 0) +
-                  Dx(s, l2) * kxx(l1, l2, 1, 1) * Dx(sp, 1) * Bx(sp, 1);
+              PetscScalar piij = knx(l1, l2) * K[sp] * Bt[sp] +
+                                 kxx(l1, l2, 0, 0) * Dx(sp, 0) * Bx(sp, 0) +
+                                 kxx(l1, l2, 0, 1) * Dx(sp, 0) * Bx(sp, 1) +
+                                 kxx(l1, l2, 1, 0) * Dx(sp, 1) * Bx(sp, 0) +
+                                 kxx(l1, l2, 1, 1) * Dx(sp, 1) * Bx(sp, 1);
+
+              switch (type) {
+              case ViscousFunctionType::Difference:
+                aF[jp][ip].M[l1] += Dx(s, l2) * piij;
+                break;
+              case ViscousFunctionType::Average:
+                aU[jp][ip].get_piij(l1, l2) += -0.25 * piij;
+                break;
+              }
             }
           }
         }
       }
     }
   }
-  PetscCall(DMDAVecRestoreArray(run->qdomain, F, &aF));
+  if (type == ViscousFunctionType::Difference) {
+    PetscCall(DMDAVecRestoreArray(run->qdomain, F, &aF));
+  } else {
+    PetscCall(DMDAVecRestoreArray(run->domain, run->solution, &aU));
+  }
   PetscCall(DMDAVecRestoreArray(run->domain, run->local_solution, &au));
   PetscLogEventEnd(event, 0, 0, 0, 0);
   return 0;
+}
+
+// LHS implicit function for the viscous hydro equations. See notes for
+// expalanation.
+PetscErrorCode LHSIFunction2(TS ts, PetscReal t, Vec u, Vec udot, Vec F,
+                             void *context) {
+  // This is just copying udot to F. F is updated below
+  VecCopy(udot, F);
+  return ViscousFunction(ts, t, u, F, context, ViscousFunctionType::Difference);
 }
 
 PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
@@ -720,7 +701,7 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
     for (int i = ixs - 1; i < ixs + ixm + 1; i++) {
       bool ok = vhnode_findstate(au[j][i].e, au[j][i], *run->eos);
       if (!ok) {
-        findstate_problem("LHSIFunction2", i, j, au[j][i], au[j][i], *run->eos);
+        findstate_problem("LHSIJacobian2", i, j, au[j][i], au[j][i], *run->eos);
       }
     }
   }
@@ -846,6 +827,53 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
   }
   PetscLogEventEnd(event, 0, 0, 0, 0);
 
+  return 0;
+}
+
+// PostStep function to transfer solution from qsolution used by the TS solver
+// back to solution vector. This happens after each time step. Then the
+// primitives are recovered in the solution vector.
+PetscErrorCode PostStepInversion(TS ts) {
+  Vischydro *runptr = nullptr;
+  TSGetApplicationContext(ts, &runptr);
+
+  Vec u = nullptr;
+  TSGetSolution(ts, &u);
+
+  PetscScalar t;
+  TSGetTime(ts, &t);
+
+  return ViscousFunction(ts, t, u, 0, runptr, ViscousFunctionType::Average);
+}
+
+// PostStage function to transfer solution from qsolution used by the TS solver
+// back to solution vector. This happens after each stage of the solver. Then
+// the primitives are recovered in the solution vector.
+PetscErrorCode PostStageInversion(TS ts, PetscReal stagetime,
+                                  PetscInt stageindex, Vec *Y) {
+  Vischydro *runptr = nullptr;
+  TSGetApplicationContext(ts, &runptr);
+  Vischydro &run = *runptr;
+
+  TransferQGridToSolution(run.qdomain, Y[stageindex], run.domain, run.solution);
+
+  // Recover the primitives
+  VischydroNode **au;
+  PetscCall(DMDAVecGetArray(run.domain, run.solution, &au));
+
+  int ixs, ixm, jys, jym;
+  DMDAGetCorners(run.domain, &ixs, &jys, NULL, &ixm, &jym, NULL);
+  for (int j = jys; j < jys + jym; j++) {
+    for (int i = ixs; i < ixs + ixm; i++) {
+      bool ok = vhnode_findstate(au[j][i].e, au[j][i], *run.eos);
+      if (!ok) {
+        std::string context =
+            "PostStageInversion_" + std::to_string(stageindex);
+        findstate_problem(context, i, j, au[j][i], au[j][i], *run.eos);
+      }
+    }
+  }
+  PetscCall(DMDAVecRestoreArray(run.domain, run.solution, &au));
   return 0;
 }
 
