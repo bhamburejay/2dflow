@@ -48,10 +48,18 @@ def gubser_solution(tau, r, q=1.0, e0=1.0):
     return e, utau, ur
 
 
+<<<<<<< HEAD
 def setup(q, e0, tau0):
     # Grid setup
     nx = 80
     ny = 80
+=======
+def run(run_name, q, e0, tau0, exe_path="./VischydroMain.exe"):
+
+    # Grid setup - COMPROMISE: medium resolution
+    nx = 60  # Between 40 and 80
+    ny = 60  # Between 40 and 80
+>>>>>>> 9a441c8 (gubser ideal test updated)
     xmin, xmax = -5.0, 5.0
     ymin, ymax = -5.0, 5.0
     vh.input_data["Vischydro/is_bjorken"] = True
@@ -68,13 +76,13 @@ def setup(q, e0, tau0):
     vh.input_data["VischydroMain/ymin"] = ymin
     vh.input_data["VischydroMain/ymax"] = ymax
 
-    # Set time stepping
-    dt = 0.05
-    t_end = 5.0
+    # Set time stepping - COMPROMISE: reasonable speed vs accuracy
+    dt = 0.075  # Between 0.05 and 0.1
+    t_end = 4.0  # Between 3.0 and 5.0
     vh.input_data["VischydroMain/t_start"] = tau0
     vh.input_data["VischydroMain/t_end"] = t_end
     vh.input_data["VischydroMain/dt_max"] = dt
-    vh.input_data["VischydroMain/print_frequency"] = 10
+    vh.input_data["VischydroMain/print_frequency"] = 15  # Between 10 and 20
     vh.input_data["VischydroMain/run_name"] = "gubser_test"
 
 
@@ -196,8 +204,8 @@ def analyze_results(q, e0, tau0):
         plt.title(f'Gubser Flow - Conserved Init Test')
         plt.legend()
         plt.grid(True)
-        plt.savefig(f"{run_name}_comparison.png")
-        print(f"Plot saved to {run_name}_comparison.png")
+        plt.savefig(f"gubser_ideal_test.png")
+        print(f"Plot saved to gubser_ideal_test.png")
 
 
 if __name__ == "__main__":
