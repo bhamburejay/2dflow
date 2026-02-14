@@ -167,6 +167,29 @@ void test_idealHydroCellSolve() {
     cout << "Mx: " << nLF2.M[0] - nDF.M[0] << endl;
     cout << "My: " << nLF2.M[1] - nDF.M[1] << endl;
   }
+
+  DFHydro::VischydroNode n2{};
+  E = nDF.E;
+  Mx = nDF.M[0];
+  My = nDF.M[1];
+  nDF.get_stress(Tij, Tnn);
+  vhnode_make_initial_guess(n2, E, Mx, My, 0.2);
+  n2.print("** Initial guess node **");
+  vhnode_findstate(n2, E, Mx, My, eos);
+  n2.print("** After vhnode_findstate on initial guess **");
+  DFHydro::VischydroNode n3{};
+  vhnode_findstate(n3, E, Mx, My, eos, true);
+  n3.print("** After vhnode_findstate with internal initial guess **");
+  DFHydro::VischydroNode n4{};
+  vhnode_findstate(n4, E, Mx, My, Tij[0], Tij[1], Tij[3], Tnn, eos, true);
+  n4.print("** After vhnode_findstate with internal initial guess with stress **");
+  DFHydro::VischydroNode n5{};
+  vhnode_findstateLF(n5, E, Mx, My, Tij[0], Tij[1], Tij[3], Tnn, eos, true);
+  n5.print("** After vhnode_findstateLF with internal initial guess with stress **");
+  DFHydro::VischydroNode n6{};
+  vhnode_LFtoDF(eos, n5, n6);
+  n6.print("** After vhnode_LFtoDF of previous node **");
+
 }
 int main(int argc, char *argv[]) {
   test_idealHydroCellSolve();

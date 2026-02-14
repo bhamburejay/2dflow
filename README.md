@@ -13,11 +13,11 @@ cd ./build
 
 3. Type 
 
-cmake .. 
+cmake .. -DCMAKE_BUILD_TYPE=Release
 
 If you wish HDF5 support then 
 
-cmake ../ -DPETSC_HAS_HDF5=1
+cmake ../ -DPETSC_HAS_HDF5=1 -DCMAKE_BUILD_TYPE=Release
 
 This creates the tools to build the source code,  in particular it constructs the makefile
 

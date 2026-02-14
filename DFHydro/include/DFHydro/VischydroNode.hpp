@@ -237,6 +237,35 @@ struct VischydroNode {
 bool vhnode_findstate(const double &ein, /* out */ VischydroNode &n,
                       const EOS &eos);
 
+// Initializes the VischydroNode n to an initial guess for (e, ux, uy) for the given E, Mx, My, based on ideal hydro with an effective speed of sound cs2eff.
+bool vhnode_make_initial_guess(VischydroNode &n, const double &E, const double &Mx, const double &My, const double &cs2eff=0.33);
+
+// Similar to vhnode_findstate, but the initial guess for e is taken from the
+// node n if make_initial_guess=false, or an initial guess is made based on the
+// conserved charges E, Mx, My using vhnode_make_initial_guess if
+// make_initial_guess=true.
+bool vhnode_findstate(VischydroNode &n, const EOS &eos, bool make_initial_guess = false);
+
+// This routine finds the primitive variables in the density frame using Newton
+// interations, returning true on success and false on failure.
+//
+// The starting value of the energy density for the Newton iteration is either
+// taken from the node n if make_initial_guess=false, or an initial guess is
+// made based on the conserved charges E, Mx, My using vhnode_make_initial_guess
+// if make_initial_guess=true.
+//
+// The viscous stresses are not modified.
+bool vhnode_findstate(VischydroNode &n, const double &E, const double &Mx,
+                      const double &My, const EOS &eos, bool make_initial_guess = false);
+
+// Similar to vhnode_findstate, but the visous stresses are computed
+bool vhnode_findstate(VischydroNode &n, const double &E, const double &Mx,
+                      const double &My, const double &Txx, const double &Txy, const double &Tyy, const double &Tnn, const EOS &eos, bool make_initial_guess = false);
+
+// Similar to vhnode_findstate, but for the landau frame.
+bool vhnode_findstateLF(VischydroNode &n, const double &E, const double &Mx,
+                        const double &My, const double &Txx, const double &Txy, const double &Tyy, const double &Tnn, const EOS &eos, bool make_initial_guess = false);
+
 // Converts a VischydroNode from the density frame to the Landau frame. Returns
 // true on success.
 bool vhnode_DFtoLF(const EOS &eos, const VischydroNode &n_DF,

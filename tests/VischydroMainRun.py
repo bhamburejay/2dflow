@@ -10,7 +10,7 @@ To generate plots of the results after running the simulation use the command:
 
 python VischydroMainRun.py plot
 """
-import vischydro
+import vh
 import numpy as np
 import h5py
 import matplotlib.pyplot as plt
@@ -39,44 +39,44 @@ def runbj2d(fourpietabys, gaussian_const, gaussian_amplitude, gaussian_width, tm
     name = 'simple_bj2d_example'
 
     # Here will run an example in cartesian with Bjorken expansion
-    vischydro.input_data["VischydroMain/nx"] = 150 
-    vischydro.input_data["VischydroMain/xmin"] = -15.0
-    vischydro.input_data["VischydroMain/xmax"] = 15.0
-    vischydro.input_data["VischydroMain/ny"] = 150
-    vischydro.input_data["VischydroMain/ymin"] = -15.0
-    vischydro.input_data["VischydroMain/ymax"] = 15.0
+    vh.input_data["VischydroMain/nx"] = 150 
+    vh.input_data["VischydroMain/xmin"] = -15.0
+    vh.input_data["VischydroMain/xmax"] = 15.0
+    vh.input_data["VischydroMain/ny"] = 150
+    vh.input_data["VischydroMain/ymin"] = -15.0
+    vh.input_data["VischydroMain/ymax"] = 15.0
 
 
-    vischydro.input_data["VischydroMain/eta_by_s"] = fourpietabys/(4.0*np.pi)
-    vischydro.input_data["VischydroMain/zeta_by_s"] =0.0
-    vischydro.input_data["VischydroMain/t_start"] = tmin
-    vischydro.input_data["VischydroMain/t_end"] = tmax
-    vischydro.input_data["VischydroMain/run_name"] = name
+    vh.input_data["VischydroMain/eta_by_s"] = fourpietabys/(4.0*np.pi)
+    vh.input_data["VischydroMain/zeta_by_s"] =0.0
+    vh.input_data["VischydroMain/t_start"] = tmin
+    vh.input_data["VischydroMain/t_end"] = tmax
+    vh.input_data["VischydroMain/run_name"] = name
     
-    pprint.pprint(vischydro.input_data)
+    pprint.pprint(vh.input_data)
 
     # Given the initial conditions we can create some initial data
-    initialdata, dx, dy = ic1(vischydro.input_data, A=A, delta=delta, sigma=w)
+    initialdata, dx, dy = ic1(vh.input_data, A=A, delta=delta, sigma=w)
 
     # pass command line options to vischydro
     
     if actually_run:
         # The recommended way to run the vischydro code is through the runcode function in the vischydro module.
-        vischydro.runcode(initialdata, vischydro.input_data, runcommand=runcommand, actually_run = actually_run, petsc_args=petsc_args)
+        vh.runcode(initialdata, vh.input_data, runcommand=runcommand, actually_run = actually_run, petsc_args=petsc_args)
     else:
-        plot_contours(vischydro.input_data, name)
+        plot_contours(vh.input_data, name)
         plt.show()
     
 # Create the initial conditions considered by Pretorious and Pandyas fig 1
 def ic1(input_data, A=0.4, delta=0.1, sigma=4.):
     # Get the xy grid 
-    xarray, yarray, dx, dy = vischydro.xygrid(input_data)
+    xarray, yarray, dx, dy = vh.xygrid(input_data)
 
     zarray = A*np.exp(-xarray**2/(2.*sigma**2) - yarray**2/(2.*(sigma*1.4)**2)) + delta
 
     # creates a grid with the right dimensions for the vischydro code
     # the initial values are all zero 
-    initialdata = vischydro.initialdata_grid(input_data) 
+    initialdata = vh.initialdata_grid(input_data) 
 
     # set the energy density initial condition slots (3rd index = 3) The third
     # index is the energy density. 

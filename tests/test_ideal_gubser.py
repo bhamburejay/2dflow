@@ -19,7 +19,7 @@ import os
 import sys
 
 # Import the helper module
-import vischydro as vh
+import vh as vh
 
 
 def gubser_solution(tau, r, q=1.0, e0=1.0):

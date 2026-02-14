@@ -34,9 +34,9 @@ void Vischydro::load_initial_conditions(const std::string &filename,
   for (PetscInt j = ys; j < ys + ym; j++) {
     for (PetscInt i = xs; i < xs + xm; i++) {
       if (initial_field_type == "charges") {
-        // Use the file's 'e' (primitive) as the initial guess for the root
-        // finder
-        bool ok = vhnode_findstate(asol[j][i].e, asol[j][i], *eos);
+        // Use the conserved charges and find the primitive variables. Allow the
+        // root finder to make an initial guess with true. 
+        bool ok = vhnode_findstate(asol[j][i], *eos, true);
         if (!ok) {
           std::cout << "Initialization Error: Root finding failed at " << i
                     << ", " << j << std::endl;
