@@ -35,8 +35,9 @@ void Vischydro::load_initial_conditions(const std::string &filename,
     for (PetscInt i = xs; i < xs + xm; i++) {
       if (initial_field_type == "charges") {
         // Use the conserved charges and find the primitive variables. Allow the
-        // root finder to make an initial guess with true. 
-        bool ok = vhnode_findstate(asol[j][i], *eos, true);
+        // root finder to make an initial guess
+        VischydroNode &n = asol[j][i];
+        bool ok = vhnode_findstate(n, n.E, n.M[0], n.M[1], *eos);
         if (!ok) {
           std::cout << "Initialization Error: Root finding failed at " << i
                     << ", " << j << std::endl;
@@ -884,13 +885,6 @@ Vischydro::Vischydro(const int &nx_i, const double &xmin_i,
     : eos(eos_i), nx(nx_i), xmin(xmin_i), xmax(xmax_i), ny(ny_i), ymin(ymin_i),
       ymax(ymax_i) {
 
-  nlohmann::json defaults = {
-      {"cfl_max", 0.8},
-      {"is_bjorken", true},
-      {"is_periodic", true},
-      {"use_ideal_step_only", false},
-      {"highest_order_term_only", false},
-  };
   defaults.update(config);
 
   cfl = defaults.at("cfl_max").get<double>();

@@ -178,13 +178,13 @@ void test_idealHydroCellSolve() {
   vhnode_findstate(n2, E, Mx, My, eos);
   n2.print("** After vhnode_findstate on initial guess **");
   DFHydro::VischydroNode n3{};
-  vhnode_findstate(n3, E, Mx, My, eos, true);
+  vhnode_findstate(n3, E, Mx, My, eos, nDF.e*1.05);
   n3.print("** After vhnode_findstate with internal initial guess **");
   DFHydro::VischydroNode n4{};
-  vhnode_findstate(n4, E, Mx, My, Tij[0], Tij[1], Tij[3], Tnn, eos, true);
+  vhnode_findstate(n4, E, Mx, My, Tij[0], Tij[1], Tij[3], Tnn, eos);
   n4.print("** After vhnode_findstate with internal initial guess with stress **");
   DFHydro::VischydroNode n5{};
-  vhnode_findstateLF(n5, E, Mx, My, Tij[0], Tij[1], Tij[3], Tnn, eos, true);
+  vhnode_findstateLF(n5, E, Mx, My, Tij[0], Tij[1], Tij[3], Tnn, eos, nDF.e*1.05);
   n5.print("** After vhnode_findstateLF with internal initial guess with stress **");
   DFHydro::VischydroNode n6{};
   vhnode_LFtoDF(eos, n5, n6);

@@ -176,15 +176,18 @@ public:
   }
 };
 
-// Initializes the VischydroNode n to an initial guess for (e, ux, uy) for the given E, Mx, My, based on ideal hydro with an effective speed of sound cs2eff.
-bool vhnode_make_initial_guess(VischydroNode &n, const double &E, const double &Mx, const double &My, const double &c2)
-{
+// Initializes the VischydroNode n to an initial guess for (e, ux, uy) for the
+// given E, Mx, My, based on ideal hydro with an effective speed of sound
+// cs2eff.
+bool vhnode_make_initial_guess(VischydroNode &n, const double &E,
+                               const double &Mx, const double &My,
+                               const double &c2) {
   double M = sqrt(Mx * Mx + My * My);
-  double disc = pow(1 + c2,2)*pow(E,2) - 4*c2*pow(M,2);
+  double disc = pow(1 + c2, 2) * pow(E, 2) - 4 * c2 * pow(M, 2);
   if (disc < 0.) {
     return false;
-  } 
-  n.e = ((-1 + c2)*E + sqrt(disc))/(2.*c2) ;
+  }
+  n.e = ((-1 + c2) * E + sqrt(disc)) / (2. * c2);
   double vx = Mx / (E + n.e * c2);
   double vy = My / (E + n.e * c2);
   double gamm = 1. / sqrt(1. - vx * vx - vy * vy);
@@ -195,32 +198,31 @@ bool vhnode_make_initial_guess(VischydroNode &n, const double &E, const double &
 
 // This routine finds the primitive variables in the density frame using Newton
 // interations, returning true on success and false on failure.
-//
-// The starting value of the energy density for the Newton iteration is either
-// taken from the node n if make_initial_guess=false, or an initial guess is
-// made based on the conserved charges E, Mx, My if make_initial_guess=true.
-//
-// The viscous stresses are not modified.
 bool vhnode_findstate(VischydroNode &n, const double &E, const double &Mx,
-                      const double &My, const EOS &eos, bool make_initial_guess) 
-{
-  if (make_initial_guess) {
-    bool ok = vhnode_make_initial_guess(n, E, Mx, My);
-    if (!ok) {
-      return false;
-    }
-  }
+                      const double &My, const EOS &eos, const double &ein) {
   n.E = E;
   n.M[0] = Mx;
   n.M[1] = My;
-  return vhnode_findstate(n.e, n, eos);
+  return vhnode_findstate(ein, n, eos);
+}
+
+// This routine finds the primitive variables in the density frame using Newton
+// interations, returning true on success and false on failure.
+bool vhnode_findstate(VischydroNode &n, const double &E, const double &Mx,
+                      const double &My, const EOS &eos) {
+  bool ok = vhnode_make_initial_guess(n, E, Mx, My);
+  if (!ok) {
+    return false;
+  }
+  return vhnode_findstate(n, E, Mx, My, eos, n.e);
 }
 
 // Similar to vhnode_findstate, but the visous stresses are computed
 bool vhnode_findstate(VischydroNode &n, const double &E, const double &Mx,
-                      const double &My, const double &Txx, const double &Txy, const double &Tyy, const double &Tnn, const EOS &eos, bool make_initial_guess)
-{
-  bool ok = vhnode_findstate(n, E, Mx, My, eos, make_initial_guess);
+                      const double &My, const double &Txx, const double &Txy,
+                      const double &Tyy, const double &Tnn, const EOS &eos,
+                      const double &ein) {
+  bool ok = vhnode_findstate(n, E, Mx, My, eos, ein);
   if (!ok) {
     return false;
   }
@@ -235,11 +237,22 @@ bool vhnode_findstate(VischydroNode &n, const double &E, const double &Mx,
   n.pinn = Tnn - Tnn0;
   return true;
 }
+// Similar to vhnode_findstate, but the visous stresses are computed
+bool vhnode_findstate(VischydroNode &n, const double &E, const double &Mx,
+                      const double &My, const double &Txx, const double &Txy,
+                      const double &Tyy, const double &Tnn, const EOS &eos) {
+  bool ok = vhnode_make_initial_guess(n, E, Mx, My);
+  if (!ok) {
+    return false;
+  }
+  return vhnode_findstate(n, E, Mx, My, Txx, Txy, Tyy, Tnn, eos, n.e);
+}
 
 // Similar to vhnode_findstate, but for the landau frame.
 bool vhnode_findstateLF(VischydroNode &n, const double &E, const double &Mx,
-                        const double &My, const double &Txx, const double &Txy, const double &Tyy, const double &Tnn, const EOS &eos, bool make_initial_guess)
-{
+                        const double &My, const double &Txx, const double &Txy,
+                        const double &Tyy, const double &Tnn, const EOS &eos,
+                        bool make_initial_guess) {
   if (make_initial_guess) {
     bool ok = vhnode_make_initial_guess(n, E, Mx, My);
     if (!ok) {
@@ -370,8 +383,8 @@ bool vhnode_findstate(const double &ein, /* out */ VischydroNode &n,
 // node n if make_initial_guess=false, or an initial guess is made based on the
 // conserved charges E, Mx, My using vhnode_make_initial_guess if
 // make_initial_guess=true.
-bool vhnode_findstate(VischydroNode &n, const EOS &eos, bool make_initial_guess)
-{
+bool vhnode_findstate(VischydroNode &n, const EOS &eos,
+                      bool make_initial_guess) {
   if (make_initial_guess) {
     bool ok = vhnode_make_initial_guess(n, n.E, n.M[0], n.M[1]);
     if (!ok) {
@@ -380,7 +393,6 @@ bool vhnode_findstate(VischydroNode &n, const EOS &eos, bool make_initial_guess)
   }
   return vhnode_findstate(n.e, n, eos);
 }
-
 
 bool vhnode_checkstate(const VischydroNode &n) {
   double abstol = 1.e-15;

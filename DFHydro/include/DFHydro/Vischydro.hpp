@@ -9,17 +9,34 @@
 
 namespace DFHydro {
 
+// The Vishcydro class is the main class for solving the viscous hydrodynamics
+// equations in the density frame. It contains the computational grid, the
+// solution vector, the time stepper, and the equation of state. It also
+// contains methods for saving and loading the solution, as well functions for
+// for solving the equations.
+//
+// The constructor takes the grid parameters, the equation of state, and an
+// optional JSON object for additional configuration options.  The default
+// options sets up a Bjorken expansion in 2+1 dimenions with outflow boundary
+// conditions.
+//
+// The main functionality is documented by the "example/SimpleHydro.cpp" file.
 class Vischydro {
 
 public:
-  DM domain;
-  Vec solution;
-  TS stepper;
-  const EOS *eos;
+  DM domain;    // A Petsc DMDA object representing the computational grid
+  Vec solution; // A Petsc Vec object representing the solution vector
+  TS stepper;   // A Petsc TS object representing the time stepper
 
-  DM cdomain;
-  Vec coordinates;
+  DM cdomain;      // A Petsc DMDA object representing the coordinate grid
+  Vec coordinates; // A Petsc Vec object representing the coordinates of the
+                   // grid points
 
+  // Initialize the grid and the eos
+  //
+  // The default options are set up for a Bjorken expansion in 2+1 dimensions
+  // with outflow boundary conditions. The options can be changed by passing a
+  // JSON object.  See below for the default options and their meaning.
   Vischydro(const int &nx, const double &xmin, const double &xmax,
             const int &ny, const double &ymin, const double &ymax,
             const EOS *eos,
@@ -47,6 +64,7 @@ public:
   }
 
   // Get the grid size and spacing
+  const EOS &get_eos() const { return *eos; }
   double get_dx() const { return dx; }
   double get_dy() const { return dy; }
   double get_Lx() const { return xmax - xmin; }
@@ -60,6 +78,9 @@ public:
 
   double get_cfl() const { return cfl; }
   double get_default_time_step() const { return cfl * std::min(dx, dy); }
+
+  // The main function for solving the equations. It advances the solution from
+  // t1 to t2 in steps of dt.
   void solve(double t1, double t2, double dt);
 
   // The following are accessors for various options
@@ -71,9 +92,11 @@ public:
   bool has_periodic_bc() const { return is_periodic; }
 
 public:
+  // These are logically private.
   Vec local_solution;
   DM qdomain;
   Vec qsolution;
+  const EOS *eos; // A pointer to the equation of state object
 
 private:
   int nx;
@@ -85,6 +108,19 @@ private:
   double dx;
   double dy;
   double cfl;
+
+  nlohmann::json defaults = {
+      // The maximum CFL number for the time step
+      {"cfl_max", 0.8},
+      // include the Bjorken expansion term in the equations
+      {"is_bjorken", true},
+      // Periodic boundary conditions in x and y
+      {"is_periodic", false},
+      // Only ideal step is used
+      {"use_ideal_step_only", false},
+      // Only the highest order operator is used in the implicit Jacobian step.
+      {"highest_order_term_only", false},
+  };
   bool is_bjorken;
   bool highest_order_term_only;
   bool use_ideal_step_only;

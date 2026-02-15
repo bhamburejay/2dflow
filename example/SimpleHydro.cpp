@@ -17,13 +17,16 @@ void simple_initialize(Vischydro &vischydro) {
   // Get the coordinate DM, the grid descriptor for the coordinates
   DM cdomain = vischydro.cdomain;
 
+  const DFHydro::EOS &eos = vischydro.get_eos();
+
   // Convert the Petsc Vec objects to c-style 2D arrays for easy access
   VischydroNode **asol;
   PetscCallVoid(DMDAVecGetArray(domain, vischydro.solution, &asol));
   DMDACoor2d **xy;
   PetscCallVoid(DMDAVecGetArray(cdomain, vischydro.coordinates, &xy));
 
-  // Loop over the grid and set the initial conditions
+  // Loop over the grid and set the initial conditions filling asol[j][i] for
+  // each grid point.
   PetscInt xs, ys, xm, ym;
   DMDAGetCorners(domain, &xs, &ys, NULL, &xm, &ym, NULL);
   double emax = 20.0; // The maximum energy in 1/fm^4
@@ -31,25 +34,56 @@ void simple_initialize(Vischydro &vischydro) {
   double sigma = 2.5; // The width of the Gaussian in fm
   for (PetscInt j = ys; j < ys + ym; j++) {
     for (PetscInt i = xs; i < xs + xm; i++) {
-      double x = xy[j][i].x;
-      double y = xy[j][i].y;
-
       // Alternatively, could compute x,y from grid indices and spacing
       // double xs = vischydro.get_xmin() + i * vischydro.get_dx();
       // double ys = vischydro.get_ymin() + j * vischydro.get_dy();
+      double x = xy[j][i].x;
+      double y = xy[j][i].y;
 
-      // std::cout << "Grid point (" << i << "," << j << ") : (x,y)=(" << x <<
-      // "," << y << ")  (" << xs << "," << ys << ")" <<std::endl;
-
+      // Setting the variables Method 1:  You know the primitives in the density
+      // frame.
+      //
       // One should specify the energy density and fluid velocity, e, u^i
       // The rest of the VischydroNode fields will be filled in by vhnode_fill
-      double r2 = x * x + y * y;
-      asol[j][i].e = exp(-r2 / (2. * sigma * sigma)) * emax + emin;
-      asol[j][i].u[0] = 0.0;
-      asol[j][i].u[1] = 0.0;
+      // double r2 = x * x + y * y;
+      // asol[j][i].e = exp(-r2 / (2. * sigma * sigma)) * emax + emin;
+      // asol[j][i].u[0] = 0.0;
+      // asol[j][i].u[1] = 0.0;
+      // vhnode_fill(asol[j][i], eos);
+      // // Probably better to use asol[j][i].set_ideal_state(eos, e, ux, uy) to
+      // // set the variables and fill in the rest of the fields.
 
-      // Fill in the rest of the VischydroNode fields based on the EOS
-      vhnode_fill(asol[j][i], *vischydro.eos);
+      // Setting the variables Method 2: You know the primitives in the Landau
+      // frame. Here take an ultra simple initial condition where the velocity
+      // is zero and the energy density is a Gaussian in the transverse plane.
+      // The viscous stresses are set to zero.
+      VischydroNode nodeLF{};
+      double r2 = x * x + y * y;
+      double e = exp(-r2 / (2. * sigma * sigma)) * emax + emin;
+      double ux = 0.0;
+      double uy = 0.0;
+      double pixxS = 0.0;
+      double pixyS = 0.0;
+      double piyyS = 0.0;
+      double pinnS = 0.0;
+      double piB = 0.0;
+      nodeLF.setstate_LF(eos, e, ux, uy, pixxS, pixyS, piyyS, pinnS, piB);
+      // convert to the density frame variables for evolution
+      vhnode_LFtoDF(eos, nodeLF, asol[j][i]);
+
+      // Setting the variables Method 3: You know the conserved charges i.e.
+      // T^{tt}, T^{tx}, T^{ty}. The pi^{ij} are left as they are (which is
+      // probably zero by default).  The inputed pi^{ij} does not effect the
+      // evolution, as it will be recalculated at the first step based on the
+      // inputted energy density and velocity.
+      // vhnode_findstate(asol[j][i], Ttt, Ttx, Tty, eos);
+
+      // Setting the variables Method 4: You know the full stress tensor in the
+      // Landau frame, i.e. T^{tt}, T^{tx}, T^{ty}, T^{xx}, T^{xy}, T^{yy},
+      // T^{nn}.   This will set the pij could be important for plotting, or you
+      // want to convert to the Landau frame.
+      // vhnode_findstate(asol[j][i], Ttt, Ttx, Tty, Txx, Txy, Tyy, Tnn, eos,
+      // make_initial_guess);
     }
   }
   // Restore the pointers to the Petsc Vec objects
@@ -66,9 +100,12 @@ void simple_output(Vischydro &vischydro, std::ofstream &out, int istep,
   // Domain is the Petsc grid descriptor
   DM domain = vischydro.domain;
 
+  // Extract the EOS for converting to Landau frame variables for output
+  const DFHydro::EOS &eos = vischydro.get_eos();
+
   // Convert the Petsc Vec objects to c-style 2D arrays for easy access
   VischydroNode **asol;
-  //DMDACoor2d **xy;
+  // DMDACoor2d **xy;
   PetscCallVoid(DMDAVecGetArray(domain, vischydro.solution, &asol));
 
   // Get the grid corners
@@ -81,7 +118,20 @@ void simple_output(Vischydro &vischydro, std::ofstream &out, int istep,
       // This is the same as in simple_initialize, but could also use xy array
       double x = vischydro.get_xmin() + i * vischydro.get_dx();
       double y = vischydro.get_ymin() + j * vischydro.get_dy();
-      out << " " << y << " " << x << " " << asol[j][i].e << std::endl;
+
+      // Convert the densty fram variables on the grid to landau frame variables
+      // for output
+      VischydroNode nLF;
+      vhnode_DFtoLF(eos, asol[j][i], nLF);
+
+      // These are all Landau frame variables
+      // you could access the variables directly, i.e. nLF.e, nLF.ux, etc.
+      double e, ux, uy, pixxS, pixyS, piyyS, pinnS, piB;
+      nLF.getstate_LF(eos, e, ux, uy, pixxS, pixyS, piyyS, pinnS, piB);
+
+      // Output form x, y, e, eLF
+      out << " " << y << " " << x << " " << asol[j][i].e << " " << e
+          << std::endl;
     }
     out << std::endl;
   }

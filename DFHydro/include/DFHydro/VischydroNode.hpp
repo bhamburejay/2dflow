@@ -66,6 +66,7 @@ struct VischydroNode {
 
   void zero() {
     E = 0.0;
+    e = 0.0;
     for (int i = 0; i < dim; i++) {
       M[i] = 0.0;
       u[i] = 0.0;
@@ -74,7 +75,8 @@ struct VischydroNode {
       piij[i] = 0.0;
     }
     pinn = 0.0;
-    e = 0.0;
+    // Derived quantities
+    ut = 0.0;
     p = 0.0;
     beta = 0.0;
     cs2 = 0.0;
@@ -148,7 +150,7 @@ struct VischydroNode {
   //
   // Use setstate and setstate_LF to set the full state including viscous
   // stresses.
-  void set_ideal_state(const EOS &eos, const double &e, const double &ux,
+  void setstate(const EOS &eos, const double &e, const double &ux,
                        const double &uy) {
     this->e = e;
     this->u[0] = ux;
@@ -234,37 +236,51 @@ struct VischydroNode {
 // The ideal parts of the node are set after the function returns. However, the
 // conserved charges E and M are not modified, and the viscous stresses are not
 // modified.
-bool vhnode_findstate(const double &ein, /* out */ VischydroNode &n,
-                      const EOS &eos);
+bool vhnode_findstate(const double &ein, VischydroNode &n, const EOS &eos);
 
-// Initializes the VischydroNode n to an initial guess for (e, ux, uy) for the given E, Mx, My, based on ideal hydro with an effective speed of sound cs2eff.
-bool vhnode_make_initial_guess(VischydroNode &n, const double &E, const double &Mx, const double &My, const double &cs2eff=0.33);
-
-// Similar to vhnode_findstate, but the initial guess for e is taken from the
-// node n if make_initial_guess=false, or an initial guess is made based on the
-// conserved charges E, Mx, My using vhnode_make_initial_guess if
-// make_initial_guess=true.
-bool vhnode_findstate(VischydroNode &n, const EOS &eos, bool make_initial_guess = false);
+// Initializes the VischydroNode n to an initial guess for (e, ux, uy) for the
+// given E, Mx, My, based on ideal hydro with an effective speed of sound
+// cs2eff.
+bool vhnode_make_initial_guess(VischydroNode &n, const double &E,
+                               const double &Mx, const double &My,
+                               const double &cs2eff = 0.33);
 
 // This routine finds the primitive variables in the density frame using Newton
 // interations, returning true on success and false on failure.
 //
-// The starting value of the energy density for the Newton iteration is either
-// taken from the node n if make_initial_guess=false, or an initial guess is
-// made based on the conserved charges E, Mx, My using vhnode_make_initial_guess
-// if make_initial_guess=true.
+// An initial guess is made based on the conserved charges E, Mx, My using
+// vhnode_make_initial_guess.
 //
 // The viscous stresses are not modified.
 bool vhnode_findstate(VischydroNode &n, const double &E, const double &Mx,
-                      const double &My, const EOS &eos, bool make_initial_guess = false);
+                      const double &My, const EOS &eos);
 
-// Similar to vhnode_findstate, but the visous stresses are computed
+// Convenience function for vhnode_findstate(ein, n, eos)
 bool vhnode_findstate(VischydroNode &n, const double &E, const double &Mx,
-                      const double &My, const double &Txx, const double &Txy, const double &Tyy, const double &Tnn, const EOS &eos, bool make_initial_guess = false);
+                      const double &My, const EOS &eos, const double &ein);
 
-// Similar to vhnode_findstate, but for the landau frame.
+// Similar to vhnode_findstate with the intiial guess,  but the visous stresses
+// are computed
+bool vhnode_findstate(VischydroNode &n, const double &E, const double &Mx,
+                      const double &My, const double &Txx, const double &Txy,
+                      const double &Tyy, const double &Tnn, const EOS &eos);
+
+// Similar to vhnode_findstate with the intiial guess,  but the visous stresses
+// are computed
+bool vhnode_findstate(VischydroNode &n, const double &E, const double &Mx,
+                      const double &My, const double &Txx, const double &Txy,
+                      const double &Tyy, const double &Tnn, const EOS &eos,
+                      const double &ein);
+
+// Similar to vhnode_findstate, but for the landau frame. The initial guess is
+// made based on the conserved charges E, Mx, My using vhnode_make_initial_guess
+// if make_initial_guess=true, and the initial guess is taken from the node n if
+// make_initial_guess=false. In particular if the initial guess is false then
+// n.ux and n.uy must be set before calling this function.
 bool vhnode_findstateLF(VischydroNode &n, const double &E, const double &Mx,
-                        const double &My, const double &Txx, const double &Txy, const double &Tyy, const double &Tnn, const EOS &eos, bool make_initial_guess = false);
+                        const double &My, const double &Txx, const double &Txy,
+                        const double &Tyy, const double &Tnn, const EOS &eos,
+                        bool make_initial_guess = true);
 
 // Converts a VischydroNode from the density frame to the Landau frame. Returns
 // true on success.
