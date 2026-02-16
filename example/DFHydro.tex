@@ -1,0 +1,334 @@
+\documentclass[12pt]{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{minted}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+
+\title{DFHydro: Simple to use for existing hydrodynamic codes}
+\date{\today}
+
+
+\begin{document}
+
+\maketitle      % Creates the title block
+\tableofcontents % Generates the TOC
+
+\section{Introduction}
+This document shows how the Density Frame Hydro code can be used within existing hydrodynamic codes for heavy ion collisions.  The code SimpleHydro.cpp is a simple example of how it works.
+
+\section{The Equation of State}
+The  equation of state is defined by the DFHydro::EOS class, which is an abstract base class that defines the interface for the equation of state.  The user must provide a concrete implementation of this class that defines the thermodynamic properties of the system.  
+
+{\bf Note:} The code uses units of ${\rm fm}$ for length and ${\rm fm}$ for time,
+so the equation of state should be defined in these units.  For example, the
+energy density should be in units of ${1/{\rm fm}^4}$. {\bf Everything  is in units  fm!} 
+
+\begin{minted}[ fontsize=\small,  breaklines]{c++}
+namespace DFHydro {
+
+class EOS {
+
+public:
+  EOS() { ; }
+  virtual ~EOS() = default;
+
+  virtual double get_cs2(double e, double rhob) const = 0;
+  virtual double get_temperature(double e, double rhob) const = 0;
+  virtual double get_pressure(double e, double rhob) const = 0;
+  virtual double get_entropy(double e, double rhob) const = 0;
+  virtual double get_eta_by_s(double T, double muB) const = 0;
+  virtual double get_zeta_by_s(double T, double muB) const = 0;
+};
+} // namespace DFHydro
+\end{minted}
+We had no trouble wrapping the MUSIC equation of state in this interface, and it should be straightforward to wrap any other equation of state as well. 
+
+\section{The hydrodynamic variables on the grid and the VischydroNode structure}
+
+The code runs on a 2D grid in the transverse plane, with coordinates (x,y).  
+At each grid point we have to represent the hydrodynamic variables, i.e. there is a data structure that contains the hydrodynamic variables in the density frame at each grid point.  The structure is defined as follows:
+
+\begin{minted}[fontsize=\small,  breaklines]{c++}
+namespace DFHydro {
+struct VischydroNode {
+  static const int dim = 2;
+  static const int Ncharge = 3;
+  static const int NDOF = 15;
+  static const int NIdeal = 10; // Starting index of viscous DOF
+  static const int NVisc = 5;   // Number of viscous DOF
+  PetscScalar E{};              // Ttt
+  PetscScalar M[dim]{};         // Ttx, Tty
+  PetscScalar e{};      // energy density in either landau or density frame
+  PetscScalar u[dim]{}; // ux, uy in either landau or density frame
+  PetscScalar ut{};     // u0 in either landau or density frame
+  PetscScalar p{};      // p(e)
+  PetscScalar beta{};   // 1/T(e)
+  PetscScalar cs2{};    // cs^2(e)
+  PetscScalar
+      piij[2 * dim]{}; // shear stress tensor components in either landau or
+                       // density frame: pixx, pixy, piyx, piyy
+  PetscScalar pinn{};  // the etaeta component of the shear stress tensor in
+                       // either landau or density frame
+  // Lots of useful functions for setting variables, computing fluxes, etc. are
+  // defined in the VischydroNode class.  You can set the variables directly,
+  // but is more convenient and better practce to use the functions defined in
+  // the class.
+};
+} // namespace DFHydro
+\end{minted}
+The vischydro node structure defines the stress tensor in either the Landau or density frame.   The two frame choices have the same $T^{\mu\nu}$ of course, but differ on the separation into the ideal and viscous parts.  
+
+In the density frame 
+\begin{align}
+T^{00} \equiv & (e + p) u^0 u^0 - p   \\
+T^{0i} \equiv & (e + p) u^0 u^i 
+\end{align}
+In the density frame $e$ and $u^i$ are determined by the energy density and
+momentum densities of the fluid, $T^{\tau\tau}=E$ and $T^{\tau i}=M^i$. This is
+not the case in the Landau frame where $e$ and $u^i$ are determined by the full
+stress tensor.  
+
+The spatial stress tensor is 
+\begin{align}
+T^{ij} \equiv &  e u^i u^j + p \Delta^{ij} + \pi^{ij} \\
+T^{nn} \equiv \tau^2 T^{\eta\eta} \equiv & p + \tau^2 \pi^{\eta\eta} = p + \pi^{nn} 
+\end{align}
+The evolution variables are \emph{only} $E$ and $M^i$ in the
+density frame (or equivalently $e$ and $u^i$).  $\pi^{ij}$ is instantaneously
+determined by the constitutive relation $\pi^{ij} =
+\kappa^{ijlm}\partial_l\beta_m$. The stored value of $\pi^{ij}$ in the {\tt VischydroNode} is not used for
+the time evolution.  
+$\pi^{ij}$ and $\pi^{nn}$ is computed \emph{after} each time step (by differencing $E$ and $M^i$) for your information,  plotting purposes,  and for converting the fluid data to the Landau frame. 
+
+
+In the Landau frame, the stress tensor $T^{\mu\nu}$ is the same, but the values of $e$ and $u^i$ and $\pi^{\mu\nu}$ are different. 
+\begin{align}
+T^{00} \equiv & ( e + p) u^0 u^0 - p + \pi^{00} \\
+T^{0i} \equiv  & ( e + p) u^0 u^i + \pi^{0i} \\
+T^{ij} \equiv&  e u^i u^j + p \Delta^{ij} + \pi^{ij} \\
+T^{nn} \equiv \tau^2 T^{\eta\eta} \equiv & p + \tau^2 \pi^{\eta\eta} \equiv p + \pi^{nn} 
+\end{align}
+The shear and bulk tensors are 
+\begin{align}
+\pi^{\mu\nu} = \pi^{\mu\nu}_S + \pi_B \Delta^{\mu\nu} 
+\end{align}
+
+
+\subsection{Filling up the {\tt VischydroNode} structure}
+Now we will describe how to correctly fill up the vischydro node in the density frame and Landau frame.  There are a variety of ways depending on the variables you have.  We expect that most people will have codes that tacitly assume the Landau frame. So, the procedure is to set the variables of the node in the Landau frame and then use the function \mintinline{c++}{vhnode_LFtoDF} to convert to the density frame.  The code will then evolve the density frame variables, and you can convert back to the Landau frame after the step if you want to do freezeout in the Landau frame, with \mintinline{c++}{vhnode_DFtoLF}.
+
+\subsubsection{Density frame}
+If you are working entirely in the density frame (this is not most people but is the simplest), then you can set the variables directly in the density frame.  The most basic way  is as follows:
+\begin{minted}[fontsize=\small,  breaklines]{c++}
+VischydroNode nodeDF{}; // initializes everything to zero
+nodeDF.e = e;
+nodeDF.u[0] = ux;
+nodeDF.u[1] = uy;
+vhnode_fill(nodeDF, eos); // Uses the equation of state to fill in the rest of the variables, e.g. p, beta, cs2, etc. piij are left unchanged, ie. zero by default.
+\end{minted}
+Software people think it is  better practice to use the member function
+\begin{minted}[fontsize=\small,  breaklines]{c++}
+nodeDF.setstate(eos, e, ux, uy);
+\end{minted}
+which does the same thing.  After these steps the node is ready for time evolution.
+
+These steps will set the ideal part of the stress tensor, but not the viscous part, which is left unchanged (and is zero by default).  
+If you do know the $\pi^{ij}$ then you can set them as well using the member function
+\begin{minted}[fontsize=\small,  breaklines]{c++}
+nodeDF.setstate(eos, e, ux, uy, pixx, pixy, piyy, pinn);
+\end{minted}  
+The only real reason for doing this is if you want to convert the node to the
+Landau frame or if it is helpful for plotting.  After taking a step the inputted
+$\pi^{ij}$ will be overwritten based on the spatial derivatives of the current
+energy density and velocity.
+
+Alternatively, you can set the density frame variables directly from
+$T^{\mu\nu}$. In fact for the code to work correctly, you only need to specify
+the energy and momentum densities, $T^{\tau\tau}\equiv E$ and $T^{\tau i}\equiv
+M^i$, and the code will compute the rest of the variables for you\footnote{As before the
+$\pi^{ij}$ in the will be unchanged by calling {\tt vhnode\_findstate}.
+The stored value of $\pi^{ij}$ is not used in the evolution. $\pi^{ij}$ is recalculated (overwriting the stored value) after each step using the current energy and momentum densities, i.e. based on $E$ and $M^i$ and their spatial derivatives.
+% The constitutive relation is used for computing this $\pi^{ij}
+% =\kappa^{ijlm}\partial_l\beta_m$. 
+}.  
+So,  if you have the energy and momentum densities in your code, then you can set the density frame variables directly as follows:
+\begin{minted}[ fontsize=\small,  breaklines]{c++}
+ VischydroNode nodeDF;
+ vhnode_findstate(nodeDF, Ttt, Ttx, Tty, eos);
+\end{minted}
+This does a root search to find the state. It comes up with its own initial guess for the energy density.  If you know a guess for the energy
+density  you can use 
+ \begin{minted}[ fontsize=\small,  breaklines]{c++}
+ vhnode_findstate(nodeDF, Ttt, Ttx, Tty, eos, eGuess); 
+ \end{minted}
+ This isn't usually necessary as the function will typicall make a suitable guess for you. If you have the full stress tensor in the density frame, i.e. $T^{tt}$, $T^{tx}$, $T^{ty}$, $T^{xx}$, $T^{xy}$, $T^{yy}$, and $T^{nn}$, then you can set the density frame variables as follows (with or without an initial guess for the energy density):
+\begin{minted}[ fontsize=\small,  breaklines]{c++}
+vhnode_findstate(nodeDF, Ttt, Ttx, Tty, Txx, Txy, Tyy, Tnn, eos, eGuess); 
+\end{minted}
+Again, the reason why you would do this if you have the full stress tensor in the density frame is if you want to convert to the Landau frame, or if it is helpful for plotting.
+
+Again after these steps the node is ready for use in the time evolution. 
+
+
+\subsubsection{Landau frame}
+If you have the primitive variables in the Landau frame (this is most people!) then 
+you would use the settters of the {\tt VischydroNode} class to set the variables in the Landau frame, and then use the function \mintinline{c++}{vhnode_LFtoDF} to convert to the density frame.  The relevant lines of code are as follows:
+\begin{minted}[fontsize=\small,  breaklines]{c++}
+// define the equations of state and the extract the real numbers 
+// from your code's grid 
+using namespace DFHydro;
+VischydroNode nodeLF;
+nodeLF.setstate_LF(eos, e, ux, uy, pixxS, pixyS, piyyS, pinnS, piB);
+VichydroNode nodeDF;
+// Now convert DF frame
+VischydroNode nDF;
+vhnode_LFtoDF(eos, nodeLF, nDF);
+\end{minted}
+You can of course convert in the other direction as well using the function
+\mintinline{c++}{vhnode_DFtoLF}.  Then use the variables in the LF for freezeout. 
+
+
+There are many more conenience functions. The default is the density frame, so if you set the variables directly in the density frame then you don't need to do any conversion. The setters and findstate functions which work with the Landau frame are notated with the suffix "LF".
+
+\section{Setting up the grid and running the code}
+
+The example code {\tt SimpleHydro.cpp} puts together the pieces to show how to set up the grid and run the code.  The core ingredients are setting up the grid and choosing a time step, then calling the stepper to advance the solution 
+
+\subsection{Setting up the grid}
+
+\begin{minted}[ fontsize=\small,  breaklines]{c++}
+Vischydro vischydro(nx, xmin, xmax, ny, ymin, ymax, &eos);
+\end{minted}
+The constructor takes the grid parameters, the equation of state, and an optional JSON object (not used here) for additional configuration options. 
+These options control a lot of technical details, e.g. if you want period
+boundary conditions, ideal hydro only, etc.  The default options sets up a
+viscous Bjorken expansion in 2+1 dimenions with outflow boundary conditions.
+This is documented in the code and in the header file.  
+
+The coordinates of the grid are 
+\begin{minted}[ fontsize=\small,  breaklines]{c++}
+  double xs = vischydro.get_xmin() + i * vischydro.get_dx();
+  double ys = vischydro.get_ymin() + j * vischydro.get_dy();
+\end{minted}
+where $i=0,1,...,nx-1$ and $j=0,1,...,ny-1$. With this convention ${\rm xmax}$ is not a grid point, but is the right edge of the last grid cell.  The same for ${\rm ymax}$.
+
+
+
+
+\subsection{Setting the initial condition and advancing the solution}
+Now that you have a grid you need to set the intial condition. How do you loop over the grid and access the solution vector containing the VischydroNode structures? The relevant lines are as follows:
+
+
+\begin{minted}[ fontsize=\small,  breaklines]{c++}
+// This function initializes the Vischydro grid with simple initial conditions.
+// It shows how to access and modify the VischydroNode objects on the grid.
+void simple_initialize(DFHydro::Vischydro &vischydro) {
+  // Initialize the grid with some simple initial conditions
+
+  using namespace DFHydro;
+  // Domain is the Petsc grid descriptor
+  DM domain = vischydro.domain;
+  // Get the coordinate DM, the grid descriptor for the coordinates
+  DM cdomain = vischydro.cdomain;
+
+  // Extract the eos
+  const EOS &eos = vischydro.get_eos();
+
+  // Convert the Petsc Vec objects to c-style 2D arrays for easy access
+  VischydroNode **asol;
+  PetscCallVoid(DMDAVecGetArray(domain, vischydro.solution, &asol));
+  DMDACoor2d **xy;
+  PetscCallVoid(DMDAVecGetArray(cdomain, vischydro.coordinates, &xy));
+
+  // Loop over the grid and set the initial conditions
+  PetscInt xs, ys, xm, ym;
+  DMDAGetCorners(domain, &xs, &ys, NULL, &xm, &ym, NULL);
+  for (PetscInt j = ys; j < ys + ym; j++) {
+    for (PetscInt i = xs; i < xs + xm; i++) {
+      double x = xy[j][i].x;
+      double y = xy[j][i].y;
+
+      ViscydroNode nodeLF;
+      // Fill up the node in the Landau frame with some simple initial conditions, e.g. a Gaussian energy density profile and zero velocity, and zero stress. 
+      double emax = 20.0; // The maximum energy in 1/fm^4
+      double emin = 1.e-2;
+      double sigma = 2.5; // The width of the Gaussian in fm
+      double r2 = x * x + y * y;
+      nodeLF.setstate_LF(eos, exp(-r2 / (2. * sigma * sigma)) * emax + emin, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+      
+      // Put the data into density frame node at lattice site (i,j)
+      vhnode_LFtoDF(eos, nodeLF, asol[j][i]);
+    }
+  }
+  // Restore the pointers to the Petsc Vec objects
+  PetscCallVoid(DMDAVecRestoreArray(domain, vischydro.solution, &asol));
+  PetscCallVoid(DMDAVecRestoreArray(cdomain, vischydro.coordinates, &xy));
+}
+\end{minted}
+
+
+\subsection{Advancing the solution}
+The main function for solving the equations is the {\tt solve} function, which takes the start and end time and the time step, and advances the solution from $t_1$ to $t_2$ in steps of $dt$.
+
+The time step is determined by the CFL condition, which is computed from the grid spacing and the speed of sound.  The default time step is given by \mintinline{c++}{double dt = vischydro.get_default_time_step();}, but you can choose a smaller time step if you want.
+
+The actual stepping is done by calling the {\tt solve} function as follows:
+\begin{minted}[ fontsize=\small,  breaklines]{c++}
+double t1 = 1.0; // start time in fm/c
+double t2 = 10.0; // end time in fm/c
+double dt = vischydro.get_default_time_step(); // time step in fm/c
+vischydro.solve(t1, t2, dt);
+\end{minted}
+Though must users will want to do something like 
+\begin{minted}[ fontsize=\small,  breaklines]{c++}
+vischydro.solve(t1, t1 + dt, dt);
+\end{minted}
+So they can do something with the solution after each step, e.g. write it to a file, compute some observables, etc.
+
+\subsection{Extracting the solution variables in the Landau Frame for subsquent use for freezeout}
+
+The procedure is the reverse of the procedure for setting the initial condition.  You can convert from the density frame to the Landau frame using the function \mintinline{c++}{vhnode_DFtoLF}.  Then use the variables in the LF for freezeout. See the example code if confused.
+\begin{minted}[ fontsize=\small,  breaklines]{c++}
+    // Convert the densty frame variables on the grid to landau frame variables for output
+    VischydroNode nLF ; 
+    vhnode_DFtoLF(eos, asol[j][i], nLF);
+
+    // These are all Landau frame variables in nLF. 
+    // You could access the variables directly, i.e. nLF.e, nLF.ux, etc, but it is better practice to use the member functions of the VischydroNode class to access the variables.
+    double e, ux, uy, pixxS, pixyS, piyyS, pinnS, piB;
+    nLF.getstate_LF(eos, e, ux, uy, pixxS, pixyS, piyyS, pinnS, piB);
+\end{minted}
+
+\section{Installation within an existing code}
+
+First thing you should get the code running on its own, running the example code
+SimpleHydro.cpp.  This compiles the library DFHydro.  It is a good idea to run the example code and understand how it works before trying to integrate it into your code.
+
+
+Then you can start to integrate it into your code.   DFHydro is set up to do
+this.  All the code is in the namespace {\tt DFHydro}, so it should not cause
+any name conflicts.   The header files are in the include/DFHydro directory. So
+again there should be no name conflicts.  
+
+With the MUSIC code base we created a git submodule for the DFHydro code within MUSIC.  Then the whole DFHydro sits in its own directory not changing anything in MUSIC.  
+In CMakeLists.txt we add the following line to include
+the DFHydro code in the build process  before the other stuff
+\begin{minted}[ fontsize=\small,  breaklines]{cmake}
+    add_subdirectory(DFHydro)
+\end{minted}
+Then one can link 
+\begin{minted}[ fontsize=\small,  breaklines]{cmake}
+    target_link_libraries(${libname} PUBLIC DFHydro)
+\end{minted}
+which linked the music library to the DFHydro library.
+
+We then created a wrapper class in MUSIC that contains a Vischydro object and
+calls the relevant functions.  Its primary job is to transfer the data between
+the MUSIC and DFHydro grids  before and after the step. 
+
+
+\end{document}
