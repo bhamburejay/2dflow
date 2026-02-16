@@ -19,7 +19,9 @@ import os
 import sys
 
 # Import the helper module
-import vh as vh
+import vischydro as vh
+
+OUTDIR = os.path.abspath(os.path.dirname(__file__))
 
 
 def gubser_solution(tau, r, q=1.0, e0=1.0):
@@ -48,17 +50,25 @@ def gubser_solution(tau, r, q=1.0, e0=1.0):
     return e, utau, ur
 
 
-def setup(q, e0, tau0):
-    # Grid setup
-    nx = 80
-    ny = 80
-    xmin, xmax = -5.0, 5.0
-    ymin, ymax = -5.0, 5.0
-    vh.input_data["Vischydro/is_bjorken"] = True
-    vh.input_data["Vischydro/use_ideal_step_only"] = True
+def run(
+    run_name,
+    q,
+    e0,
+    tau0,
+    exe_path="./VischydroMain.exe",
+    t_end=4.0,
+    dt=0.075,
+    print_frequency=15,
+    nx=60,
+    ny=60,
+    xmin=-10.0,
+    xmax=10.0,
+    ymin=-10.0,
+    ymax=10.0,
+):
 
-    vh.input_data["VischydroMain/eta_by_s"] = 1.0 / (4.*np.pi)
-    vh.input_data["VischydroMain/zeta_by_s"] = 0.5 / (4.*np.pi)
+    vh.input_data["VischydroMain/eta_by_s"] = 0.0
+    vh.input_data["VischydroMain/zeta_by_s"] = 0.0
     vh.input_data["VischydroMain/initial_field_type"] = "charges"
 
     vh.input_data["VischydroMain/nx"] = nx
@@ -67,19 +77,14 @@ def setup(q, e0, tau0):
     vh.input_data["VischydroMain/xmax"] = xmax
     vh.input_data["VischydroMain/ymin"] = ymin
     vh.input_data["VischydroMain/ymax"] = ymax
+    vh.input_data["Vischydro/is_bjorken"] = True
 
-    # Set time stepping
-    dt = 0.05
-    t_end = 5.0
+    # Set time stepping - COMPROMISE: reasonable speed vs accuracy
     vh.input_data["VischydroMain/t_start"] = tau0
     vh.input_data["VischydroMain/t_end"] = t_end
     vh.input_data["VischydroMain/dt_max"] = dt
-    vh.input_data["VischydroMain/print_frequency"] = 10
-    vh.input_data["VischydroMain/run_name"] = "gubser_test"
-
-
-def run(q, e0, tau0, exe_path="./VischydroMain.exe"):
-    setup(q, e0, tau0)
+    vh.input_data["VischydroMain/print_frequency"] = print_frequency
+    vh.input_data["VischydroMain/run_name"] = os.path.join(OUTDIR, run_name)
 
     # Generate initial condition
     X, Y, dx, dy = vh.xygrid(vh.input_data)
@@ -109,6 +114,7 @@ def run(q, e0, tau0, exe_path="./VischydroMain.exe"):
     initial_grid[:, :, 1] = Mx_cons
     initial_grid[:, :, 2] = My_cons
     initial_grid[:, :, 3] = e_init  # initial guess for root finder
+
     # these are not needed since we are using conserved initial conditions
     # initial_grid[:,:,4] = ux_init
     # initial_grid[:,:,5] = uy_init
@@ -117,13 +123,10 @@ def run(q, e0, tau0, exe_path="./VischydroMain.exe"):
     vh.runcode(initial_grid, vh.input_data, runcommand=exe_path)
 
 
-def analyze_results(q, e0, tau0):
-    setup(q, e0, tau0)
-    run_name = vh.input_data["VischydroMain/run_name"]
-
+def analyze_results(run_name, q, e0):
     # Load grid time file
     try:
-        times = np.loadtxt(f"{run_name}_grid_t.txt")
+        times = np.loadtxt(os.path.join(OUTDIR, f"{run_name}_grid_t.txt"))
         # Ensure times is iterable
         if times.ndim == 0:
             times = np.array([times])
@@ -132,7 +135,7 @@ def analyze_results(q, e0, tau0):
         return
 
     # Load HDF5 grid
-    h5_file = f"{run_name}_grid.h5"
+    h5_file = os.path.join(OUTDIR, f"{run_name}_grid.h5")
     if not os.path.exists(h5_file):
         print("No output file found.")
         return
@@ -196,8 +199,9 @@ def analyze_results(q, e0, tau0):
         plt.title(f'Gubser Flow - Conserved Init Test')
         plt.legend()
         plt.grid(True)
-        plt.savefig(f"{run_name}_comparison.png")
-        print(f"Plot saved to {run_name}_comparison.png")
+        out_png = os.path.join(OUTDIR, "gubser_ideal_test.png")
+        plt.savefig(out_png)
+        print(f"Plot saved to {out_png}")
 
 
 if __name__ == "__main__":
@@ -211,21 +215,68 @@ if __name__ == "__main__":
     run_parser = subparsers.add_parser(
         "run", help="Run the Gubser flow verification test")
 
-    run_parser.add_argument("--run_command", default="./VischydroMain.exe",
-                            help="Command to run the VischydroMain executable")
+    run_parser.add_argument("--run_command", required=True, type=str,
+                            default="./VischydroMain.exe", help="Command to run the VischydroMain executable")
+    run_parser.add_argument("--q", required=False, type=float, default=1.0,
+                            help="Gubser q [1/fm]")
+    run_parser.add_argument("--e0", required=False, type=float, default=1.0,
+                            help="Initial energy-density normalization")
+    run_parser.add_argument("--tau0", required=False, type=float, default=0.6,
+                            help="Initial proper time")
+    run_parser.add_argument("--t_end", required=False, type=float, default=4.0,
+                            help="Final proper time")
+    run_parser.add_argument("--dt", required=False, type=float, default=0.075,
+                            help="Maximum time step")
+    run_parser.add_argument("--print_frequency", required=False, type=int, default=15,
+                            help="Save every N steps")
+    run_parser.add_argument("--nx", required=False, type=int, default=60,
+                            help="Grid points in x")
+    run_parser.add_argument("--ny", required=False, type=int, default=60,
+                            help="Grid points in y")
+    run_parser.add_argument("--xmin", required=False, type=float, default=-10.0,
+                            help="x minimum")
+    run_parser.add_argument("--xmax", required=False, type=float, default=10.0,
+                            help="x maximum")
+    run_parser.add_argument("--ymin", required=False, type=float, default=-10.0,
+                            help="y minimum")
+    run_parser.add_argument("--ymax", required=False, type=float, default=10.0,
+                            help="y maximum")
+    run_parser.add_argument("--run_name", required=False, type=str, default="gubser_test",
+                            help="Output run_name prefix")
 
     # Sub-command: plot
     plot_parser = subparsers.add_parser(
         "plot", help="Plot results from Gubser flow verification test")
+    plot_parser.add_argument("--q", required=False, type=float, default=1.0,
+                             help="Gubser q [1/fm]")
+    plot_parser.add_argument("--e0", required=False, type=float, default=1.0,
+                             help="Initial energy-density normalization used in analytic comparison")
+    plot_parser.add_argument("--run_name", required=False, type=str, default="gubser_test",
+                             help="Output run_name prefix")
 
     args = parser.parse_args()
 
     # Setup parameters
-    q = 1.0
-    e0 = 1.0
-    tau0 = 0.6
+    run_name = args.run_name
+    q = args.q
+    e0 = args.e0
 
     if args.command == "run":
-        run(q, e0, tau0, exe_path=args.run_command)
+        run(
+            run_name,
+            q,
+            e0,
+            args.tau0,
+            exe_path=args.run_command,
+            t_end=args.t_end,
+            dt=args.dt,
+            print_frequency=args.print_frequency,
+            nx=args.nx,
+            ny=args.ny,
+            xmin=args.xmin,
+            xmax=args.xmax,
+            ymin=args.ymin,
+            ymax=args.ymax,
+        )
     elif args.command == "plot":
-        analyze_results(q, e0, tau0)
+        analyze_results(run_name, q, e0)

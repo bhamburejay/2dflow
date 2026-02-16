@@ -1,0 +1,27 @@
+{
+    "Vischydro": {
+        "cfl_max": 0.8,
+        "is_bjorken": true,
+        "highest_order_term_only": true,
+        "use_ideal_step_only": false,
+        "is_periodic": false
+    },
+    "VischydroMain": {
+        "ndof": 15,
+        "nx": 60,
+        "ny": 60,
+        "xmin": -5.0,
+        "xmax": 5.0,
+        "ymin": -5.0,
+        "ymax": 5.0,
+        "print_frequency": 15,
+        "t_start": 0.6,
+        "t_end": 4.0,
+        "dt_max": 0.075,
+        "run_name": "bjorken_test",
+        "initial_conditions_filename": "bjorken_test_ic.h5",
+        "initial_field_type": "charges",
+        "eta_by_s": 0.0,
+        "zeta_by_s": 0.0
+    }
+}
