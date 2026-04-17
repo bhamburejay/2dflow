@@ -91,10 +91,10 @@ PetscErrorCode TransferSolutionToQGrid(const DM &domain, const Vec &solution,
   VischydroQNode **qsol;
   PetscCall(DMDAVecGetArray(qdomain, qsolution, &qsol));
 
-  int ixs, iys, ixm, iym;
+  PetscInt ixs, iys, ixm, iym;
   DMDAGetCorners(domain, &ixs, &iys, NULL, &ixm, &iym, NULL);
-  for (int j = iys; j < iys + iym; j++) {
-    for (int i = ixs; i < ixs + ixm; i++) {
+  for (PetscInt j = iys; j < iys + iym; j++) {
+    for (PetscInt i = ixs; i < ixs + ixm; i++) {
       qsol[j][i].E = asol[j][i].E;
       qsol[j][i].M[0] = asol[j][i].M[0];
       qsol[j][i].M[1] = asol[j][i].M[1];
@@ -112,10 +112,10 @@ PetscErrorCode TransferQGridToSolution(const DM &qdomain, const Vec &qsolution,
   VischydroQNode **qsol;
   PetscCall(DMDAVecGetArrayRead(qdomain, qsolution, &qsol));
 
-  int ixs, iys, ixm, iym;
+  PetscInt ixs, iys, ixm, iym;
   DMDAGetCorners(domain, &ixs, &iys, NULL, &ixm, &iym, NULL);
-  for (int j = iys; j < iys + iym; j++) {
-    for (int i = ixs; i < ixs + ixm; i++) {
+  for (PetscInt j = iys; j < iys + iym; j++) {
+    for (PetscInt i = ixs; i < ixs + ixm; i++) {
       asol[j][i].E = qsol[j][i].E;
       asol[j][i].M[0] = qsol[j][i].M[0];
       asol[j][i].M[1] = qsol[j][i].M[1];
@@ -170,7 +170,7 @@ propagationVelocity(const double &cs2L, const double &uxL, const double &u0L,
   return std::make_tuple(ap, am);
 }
 
-void findstate_problem(const std::string &context, const int &i, const int &j,
+void findstate_problem(const std::string &context, const PetscInt &i, const PetscInt &j,
                        const VischydroNode &n_last, VischydroNode &n,
                        const EOS &eos) {
   static int count = 0;
@@ -212,7 +212,7 @@ void set_boundary_conditions(VischydroNode **asol, const DMDALocalInfo &info,
         PetscInt i_left = ixs - n;
         PetscInt i_src, j_src;
         i_src = ixs;
-        j_src = std::min(std::max(j, 0), my - 1);
+        j_src = std::min(std::max(j, PetscInt{0}), my - 1);
         asol[j][i_left] = asol[j_src][i_src];
       }
       if (ixs + ixm == mx) {
@@ -220,7 +220,7 @@ void set_boundary_conditions(VischydroNode **asol, const DMDALocalInfo &info,
         PetscInt i_right = ixs + ixm - 1 + n;
         PetscInt i_src, j_src;
         i_src = ixs + ixm - 1;
-        j_src = std::min(std::max(j, 0), my - 1);
+        j_src = std::min(std::max(j, PetscInt{0}), my - 1);
         asol[j][i_right] = asol[j_src][i_src];
       }
     }
@@ -233,14 +233,14 @@ void set_boundary_conditions(VischydroNode **asol, const DMDALocalInfo &info,
         PetscInt j_bottom = jys - n;
         PetscInt j_src, i_src;
         j_src = jys;
-        i_src = std::min(std::max(i, 0), mx - 1);
+        i_src = std::min(std::max(i, PetscInt{0}), mx - 1);
         asol[j_bottom][i] = asol[j_src][i_src];
       }
       // Top boundary
       if (jys + jym == my) {
         PetscInt j_top = jys + jym - 1 + n;
         PetscInt j_src = jys + jym - 1;
-        PetscInt i_src = std::min(std::max(i, 0), mx - 1);
+        PetscInt i_src = std::min(std::max(i, PetscInt{0}), mx - 1);
         asol[j_top][i] = asol[j_src][i_src];
       }
     }
@@ -288,8 +288,8 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
   const double epsilon = 1.e-8;
   limitter slope(limitter::kCenteredMinMod);
 
-  for (int j = jys - 2; j < jys + jym + 2; j++) {
-    for (int i = ixs - 2; i < ixs + ixm + 2; i++) {
+  for (PetscInt j = jys - 2; j < jys + jym + 2; j++) {
+    for (PetscInt i = ixs - 2; i < ixs + ixm + 2; i++) {
       bool ok = vhnode_findstate(asol[j][i].e, asol[j][i], eos);
       if (!ok) {
         findstate_problem("EulerRHSFunction init", i, j, asol[j][i], asol[j][i],
@@ -298,8 +298,8 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
     }
   }
 
-  for (int j = jys; j < jys + jym; j++) {
-    for (int i = ixs; i < ixs + ixm + 1; i++) {
+  for (PetscInt j = jys; j < jys + jym; j++) {
+    for (PetscInt i = ixs; i < ixs + ixm + 1; i++) {
       VischydroNode nL{};
       VischydroNode nR{};
 
@@ -356,8 +356,8 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
       }
     }
   }
-  for (int i = ixs; i < ixs + ixm; i++) {
-    for (int j = jys; j < jys + jym + 1; j++) {
+  for (PetscInt i = ixs; i < ixs + ixm; i++) {
+    for (PetscInt j = jys; j < jys + jym + 1; j++) {
       VischydroNode nL{};
       VischydroNode nR{};
 
@@ -417,8 +417,8 @@ PetscErrorCode EulerRHSFunction(TS ts, PetscReal t, Vec U, Vec G, void *ctx) {
 
   // Handle Bjorken expansion source terms
   if (run.is_bjorken_expansion()) {
-    for (int j = jys; j < jys + jym; j++) {
-      for (int i = ixs; i < ixs + ixm; i++) {
+    for (PetscInt j = jys; j < jys + jym; j++) {
+      for (PetscInt i = ixs; i < ixs + ixm; i++) {
         double tau = t;
         if (tau > 0.0) {
           ag[j][i].E += -(asol[j][i].E + asol[j][i].p) / tau;
@@ -543,12 +543,12 @@ PetscErrorCode ViscousFunction(TS ts, PetscReal t, Vec U, Vec F, void *context,
   PetscCall(DMDAGetLocalInfo(run->domain, &info));
   set_boundary_conditions(au, info, run->has_periodic_bc());
 
-  int ixs, ixm, jys, jym;
+  PetscInt ixs, ixm, jys, jym;
   DMDAGetCorners(run->domain, &ixs, &jys, 0, &ixm, &jym, 0);
 
   // Loop over the grid and call findstate to ensure primitives are recovered
-  for (int j = jys - 1; j < jys + jym + 1; j++) {
-    for (int i = ixs - 1; i < ixs + ixm + 1; i++) {
+  for (PetscInt j = jys - 1; j < jys + jym + 1; j++) {
+    for (PetscInt i = ixs - 1; i < ixs + ixm + 1; i++) {
       bool ok = vhnode_findstate(au[j][i].e, au[j][i], *run->eos);
       if (!ok) {
         findstate_problem("ViscousFunction", i, j, au[j][i], au[j][i],
@@ -587,8 +587,8 @@ PetscErrorCode ViscousFunction(TS ts, PetscReal t, Vec U, Vec F, void *context,
   std::array<int, 4> is = {0, 1, 0, 1};
   std::array<int, 4> js = {0, 0, 1, 1};
 
-  for (int j = jys - 1; j < jys + jym; j++) {
-    for (int i = ixs - 1; i < ixs + ixm; i++) {
+  for (PetscInt j = jys - 1; j < jys + jym; j++) {
+    for (PetscInt i = ixs - 1; i < ixs + ixm; i++) {
 
       Bt = {gtt * au[j][i].b0(), gtt * au[j][i + 1].b0(),
             gtt * au[j + 1][i].b0(), gtt * au[j + 1][i + 1].b0()};
@@ -694,12 +694,12 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
   PetscCall(DMDAGetLocalInfo(run->domain, &info));
   set_boundary_conditions(au, info, run->has_periodic_bc());
 
-  int ixs, ixm, jys, jym;
+  PetscInt ixs, ixm, jys, jym;
   DMDAGetCorners(run->domain, &ixs, &jys, 0, &ixm, &jym, 0);
 
   // Loop over the grid and call idealHydroCellSolve
-  for (int j = jys - 1; j < jys + jym + 1; j++) {
-    for (int i = ixs - 1; i < ixs + ixm + 1; i++) {
+  for (PetscInt j = jys - 1; j < jys + jym + 1; j++) {
+    for (PetscInt i = ixs - 1; i < ixs + ixm + 1; i++) {
       bool ok = vhnode_findstate(au[j][i].e, au[j][i], *run->eos);
       if (!ok) {
         findstate_problem("LHSIJacobian2", i, j, au[j][i], au[j][i], *run->eos);
@@ -739,8 +739,8 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
   std::array<int, 4> is = {0, 1, 0, 1};
   std::array<int, 4> js = {0, 0, 1, 1};
 
-  for (int j = jys - 1; j < jys + jym; j++) {
-    for (int i = ixs - 1; i < ixs + ixm; i++) {
+  for (PetscInt j = jys - 1; j < jys + jym; j++) {
+    for (PetscInt i = ixs - 1; i < ixs + ixm; i++) {
 
       // This call is 10% of the event loop
       evaluate_vertex_k(au[j][i], au[j][i + 1], au[j + 1][i], au[j + 1][i + 1],
@@ -752,8 +752,8 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
       for (int s1 = 0; s1 < 4; s1++) {
         for (int c1 = 0; c1 < 3; c1++) {
 
-          int ip1 = i + is[s1];
-          int jp1 = j + js[s1];
+          PetscInt ip1 = i + is[s1];
+          PetscInt jp1 = j + js[s1];
 
           // skip if the row is outside computational domain.
           if (not(ip1 >= ixs and ip1 < ixs + ixm and jp1 >= jys and
@@ -773,12 +773,12 @@ PetscErrorCode LHSIJacobian2(TS ts, PetscReal t, Vec u, Vec udot,
           for (int s2 = 0; s2 < 4; s2++) {
             for (int c2 = 0; c2 < 3; c2++) {
 
-              int ip2 = i + is[s2];
-              int jp2 = j + js[s2];
+              PetscInt ip2 = i + is[s2];
+              PetscInt jp2 = j + js[s2];
 
               if (not run->has_periodic_bc()) {
-                ip2 = std::min(std::max(ip2, 0), info.mx - 1);
-                jp2 = std::min(std::max(jp2, 0), info.my - 1);
+                ip2 = std::min(std::max(ip2, PetscInt{0}), info.mx - 1);
+                jp2 = std::min(std::max(jp2, PetscInt{0}), info.my - 1);
               }
 
               auto &column = columns_d[nc++]; // columns(s2, c2);
@@ -862,10 +862,10 @@ PetscErrorCode PostStageInversion(TS ts, PetscReal stagetime,
   VischydroNode **au;
   PetscCall(DMDAVecGetArray(run.domain, run.solution, &au));
 
-  int ixs, ixm, jys, jym;
+  PetscInt ixs, ixm, jys, jym;
   DMDAGetCorners(run.domain, &ixs, &jys, NULL, &ixm, &jym, NULL);
-  for (int j = jys; j < jys + jym; j++) {
-    for (int i = ixs; i < ixs + ixm; i++) {
+  for (PetscInt j = jys; j < jys + jym; j++) {
+    for (PetscInt i = ixs; i < ixs + ixm; i++) {
       bool ok = vhnode_findstate(au[j][i].e, au[j][i], *run.eos);
       if (!ok) {
         std::string context =

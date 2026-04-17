@@ -14,11 +14,15 @@ target_include_directories(DFHydro PUBLIC
     ${PETSC_INCLUDE_DIRS}
     PRIVATE
     src/)
-    
+
 # also add the extern directory as SYSTEM to suppress warnings from external libraries
 target_include_directories(DFHydro
     SYSTEM PRIVATE
     ${PROJECT_SOURCE_DIR}/extern)
 
+# Link PETSc and nlohmann, and HDF5 if available
 target_link_libraries(DFHydro PUBLIC PETSc nlohmann)
+if(PETSC_HAS_HDF5)
+    target_link_libraries(DFHydro PUBLIC PkgConfig::HDF5)
+endif()
 

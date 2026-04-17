@@ -15,19 +15,18 @@ if (CXX_COMPILER)
   SET(CMAKE_CXX_COMPILER ${CXX_COMPILER})
 endif (CXX_COMPILER)
 
-find_package(PkgConfig REQUIRED) 
+find_package(PkgConfig REQUIRED)
 pkg_check_modules(PETSC REQUIRED IMPORTED_TARGET PETSc)
 # Make an alias for PETSc instead of using PkgConfig::PETSC everywhere
 add_library(PETSc ALIAS PkgConfig::PETSC)
 
 
-option(PETSC_HAS_HDF5 "PETSc built with HDF5 support" OFF) 
+option(PETSC_HAS_HDF5 "PETSc built with HDF5 support" OFF)
 # Check for HDF5 support in PETSc
 if (PETSC_HAS_HDF5)
     message(STATUS "PETSc built with HDF5 support")
     add_compile_definitions(PETSC_HAVE_HDF5)
-    #find_package(HDF5 REQUIRED)
-    #include_directories(${HDF5_INCLUDE_DIRS})
+    pkg_check_modules(HDF5 REQUIRED IMPORTED_TARGET hdf5)
 else()
     message(STATUS "PETSc not built with HDF5 support")
 endif()
