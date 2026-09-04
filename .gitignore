@@ -30,4 +30,10 @@ a.out
 *.fdb_latexmk
 *.out   
 *.log
-*.gz
+*.gzwork/
+*.exe
+*.o
+*.a
+__pycache__/
+*.pyc
+!docs/*.png
