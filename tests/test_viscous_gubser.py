@@ -228,6 +228,7 @@ def analyze_results(
     f_star=DEFAULT_F_STAR,
     max_curves=6,
     overlay_ideal=True,
+    ideal_run_name="gubser_test",
 ):
     plot_params = {
         "q [1/fm]": q,
@@ -237,6 +238,7 @@ def analyze_results(
         "f_star": f_star,
         "max_curves": max_curves,
         "overlay_ideal": overlay_ideal,
+        "ideal_run_name": ideal_run_name,
         "run_name": run_name,
     }
     print_parameter_summary("Plot Parameters", plot_params)
@@ -316,13 +318,14 @@ def analyze_results(
         return
 
     # Optional overlay with ideal run if files are available.
+    ideal_prefix = ideal_run_name or "gubser_test"
     ideal_h5_candidates = [
-        os.path.join(OUTDIR, "gubser_test_grid.h5"),
-        os.path.join(os.path.abspath(os.path.join(OUTDIR, "..")), "gubser_test_grid.h5"),
+        os.path.join(OUTDIR, f"{ideal_prefix}_grid.h5"),
+        os.path.join(os.path.abspath(os.path.join(OUTDIR, "..")), f"{ideal_prefix}_grid.h5"),
     ]
     ideal_t_candidates = [
-        os.path.join(OUTDIR, "gubser_test_grid_t.txt"),
-        os.path.join(os.path.abspath(os.path.join(OUTDIR, "..")), "gubser_test_grid_t.txt"),
+        os.path.join(OUTDIR, f"{ideal_prefix}_grid_t.txt"),
+        os.path.join(os.path.abspath(os.path.join(OUTDIR, "..")), f"{ideal_prefix}_grid_t.txt"),
     ]
 
     ideal_h5 = next((p for p in ideal_h5_candidates if os.path.exists(p)), None)
@@ -351,7 +354,7 @@ def analyze_results(
         ti = ideal_time_vals[:ni_use]
 
         # Pick a few viscous times and match nearest ideal times.
-        nsel = min(max_curves, nv_use, 4)
+        nsel = min(max_curves, nv_use)
         v_indices = np.unique(np.linspace(0, nv_use - 1, num=nsel, dtype=int))
 
         ny_v = fv["solution"].shape[1]
@@ -417,6 +420,44 @@ def analyze_results(
         print(f"Overlay plot saved to {out_overlay}")
 
 
+        # Fractional difference plot: (E_visc - E_ideal) / E_ideal at matched times.
+        fig_delta, ax_delta = plt.subplots(1, 1, figsize=(10, 6))
+        xplot_v = np.abs(xs_v)
+        order_v = np.argsort(xplot_v)
+
+        for iv in v_indices:
+            tau_v = float(tv[iv])
+            ii = int(np.argmin(np.abs(ti - tau_v)))
+            tau_i = float(ti[ii])
+
+            Ev = fv["solution"][iv, mid_y_v, :, 0]
+            Ei = fi["solution"][ii, mid_y_i, :, 0]
+
+            # Interpolate ideal profile to viscous x-grid before differencing.
+            Ei_on_v = np.interp(xs_v, xs_i, Ei)
+            valid = np.abs(Ei_on_v) > 1e-14
+            frac = np.full_like(Ev, np.nan, dtype=float)
+            frac[valid] = (Ev[valid] - Ei_on_v[valid]) / Ei_on_v[valid]
+
+            ax_delta.plot(
+                xplot_v[order_v],
+                frac[order_v],
+                "-",
+                label=rf"$\tau_v={tau_v:.2f}$ vs $\tau_i={tau_i:.2f}$",
+            )
+
+        ax_delta.axhline(0.0, color="k", linestyle="--", linewidth=1)
+        ax_delta.set_xlabel(r"$r=|x|$ at mid-$y$")
+        ax_delta.set_ylabel(r"$(E_{visc}-E_{ideal})/E_{ideal}$")
+        ax_delta.set_title("Viscous vs Ideal Fractional Difference")
+        ax_delta.grid(True)
+        ax_delta.legend(fontsize=8)
+        fig_delta.tight_layout()
+        out_delta = os.path.join(OUTDIR, "gubser_ideal_viscous_fractional_diff.png")
+        fig_delta.savefig(out_delta)
+        print(f"Fractional-difference plot saved to {out_delta}")
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -456,6 +497,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Disable auto-overlay with ideal run, even if ideal data files are found",
     )
+    plot_parser.add_argument(
+        "--ideal_run_name",
+        type=str,
+        default="gubser_test",
+        help="Ideal run prefix used to load <run>_grid.h5 and <run>_grid_t.txt",
+    )
 
     args = parser.parse_args()
 
@@ -485,4 +532,5 @@ if __name__ == "__main__":
             f_star=args.f_star,
             max_curves=args.max_curves,
             overlay_ideal=(not args.no_overlay_ideal),
+            ideal_run_name=args.ideal_run_name,
         )

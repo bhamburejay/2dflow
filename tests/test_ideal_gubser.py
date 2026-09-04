@@ -123,7 +123,7 @@ def run(
     vh.runcode(initial_grid, vh.input_data, runcommand=exe_path)
 
 
-def analyze_results(run_name, q, e0):
+def analyze_results(run_name, q, e0, max_curves=4):
     # Load grid time file
     try:
         times = np.loadtxt(os.path.join(OUTDIR, f"{run_name}_grid_t.txt"))
@@ -152,8 +152,10 @@ def analyze_results(run_name, q, e0):
         # HDF5 dataset "solution": shape (N_steps, ny, nx, ndof)
 
         N_steps = f['solution'].shape[0]
-        # step_indices = np.linspace(0, N_steps-1, 5, dtype=int)
-        step_indices = range(N_steps)
+        if max_curves is None or max_curves <= 0 or max_curves >= N_steps:
+            step_indices = range(N_steps)
+        else:
+            step_indices = np.linspace(0, N_steps - 1, max_curves, dtype=int)
 
         print(times)
         print(times.shape)
@@ -253,6 +255,8 @@ if __name__ == "__main__":
                              help="Initial energy-density normalization used in analytic comparison")
     plot_parser.add_argument("--run_name", required=False, type=str, default="gubser_test",
                              help="Output run_name prefix")
+    plot_parser.add_argument("--max_curves", required=False, type=int, default=4,
+                             help="Maximum number of time slices to plot")
 
     args = parser.parse_args()
 
@@ -279,4 +283,4 @@ if __name__ == "__main__":
             ymax=args.ymax,
         )
     elif args.command == "plot":
-        analyze_results(run_name, q, e0)
+        analyze_results(run_name, q, e0, max_curves=args.max_curves)

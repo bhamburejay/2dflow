@@ -43,6 +43,21 @@ void Vischydro::load_initial_conditions(const std::string &filename,
                     << ", " << j << std::endl;
           std::abort();
         }
+      } else if (initial_field_type == "landau") {
+        // Interpret the file contents as Landau-frame primitives plus viscous
+        // stresses, then convert them to the density-frame state used by the
+        // solver.
+        VischydroNode nLF = asol[j][i];
+        vhnode_fill_LF(nLF, *eos);
+
+        VischydroNode nDF;
+        bool ok = vhnode_LFtoDF(*eos, nLF, nDF);
+        if (!ok) {
+          std::cout << "Initialization Error: Landau->density conversion failed at "
+                    << i << ", " << j << std::endl;
+          std::abort();
+        }
+        asol[j][i] = nDF;
       } else {
         vhnode_fill(asol[j][i], *eos);
       }
